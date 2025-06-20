@@ -43,7 +43,7 @@ const uint8_t rx_led_on_conf[] = {
 
 
 
-// Warm-up Packets
+// Version Info Packets
 
 // [00217314] RX: AA 05 AF 01 00 00 00 00 00 00 00 (UNKNOWN) [11 bytes]
 const uint8_t tx_warmup_1[] = {
@@ -79,6 +79,9 @@ const uint8_t rx_warmup_3[] = {
     0xAA, 0x80, 0xBF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
 
+
+
+// Warm-up Packets
 
 // [00252814] RX: AA 05 0C 00 00 00 00 00 00 00 00 (UNKNOWN) [11 bytes]
 const uint8_t tx_warmup_complete[] = {
