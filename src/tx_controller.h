@@ -13,9 +13,9 @@ void send_tx_powerup();
 void send_tx_powerdown();
 void send_tx_heartbeat();
 void send_tx_led_on_conf();
-void send_tx_warmup_1();
-void send_tx_warmup_2();
-void send_tx_warmup_3();
+void send_tx_ser_no_1();
+void send_tx_ser_no_2();
+void send_tx_warmup();
 void send_tx_warmup_complete();
 
 

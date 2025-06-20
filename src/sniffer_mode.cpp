@@ -138,24 +138,24 @@ static const char* identifyPacket(const uint8_t* data, size_t length) {
     return packet_name_buffer;
   }
   
-  // TX Warmup 1: AA XX AF 01 00 00 00 00 00 00 00 (XX=address)
+  // TX Serial Number 1: AA XX AF 01 00 00 00 00 00 00 00 (XX=address)
   if(data[0] == 0xAA && data[1] <= 0x7E && data[2] == 0xAF && 
-     memcmp(&data[3], &tx_warmup_1[3], 8) == 0) {
-    snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_warmup_1:%02X", data[1]);
+     memcmp(&data[3], &tx_ser_no_1[3], 8) == 0) {
+    snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_ser_no_1:%02X", data[1]);
     return packet_name_buffer;
   }
   
-  // TX Warmup 2: AA XX B7 01 00 00 00 00 00 00 00 (XX=address)
+  // TX Serial Number 2: AA XX B7 01 00 00 00 00 00 00 00 (XX=address)
   if(data[0] == 0xAA && data[1] <= 0x7E && data[2] == 0xB7 && 
-     memcmp(&data[3], &tx_warmup_2[3], 8) == 0) {
-    snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_warmup_2:%02X", data[1]);
+     memcmp(&data[3], &tx_ser_no_2[3], 8) == 0) {
+    snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_ser_no_2:%02X", data[1]);
     return packet_name_buffer;
   }
   
-  // TX Warmup 3: AA XX BF 01 00 00 00 00 00 00 00 (XX=address)
+  // TX Warmup: AA XX BF 01 00 00 00 00 00 00 00 (XX=address)
   if(data[0] == 0xAA && data[1] <= 0x7E && data[2] == 0xBF && 
-     memcmp(&data[3], &tx_warmup_3[3], 8) == 0) {
-    snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_warmup_3:%02X", data[1]);
+     memcmp(&data[3], &tx_warmup[3], 8) == 0) {
+    snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_warmup:%02X", data[1]);
     return packet_name_buffer;
   }
   
@@ -187,11 +187,35 @@ static const char* identifyPacket(const uint8_t* data, size_t length) {
     return packet_name_buffer;
   }
   
+  // RX Serial Number 1: AA 80 AF XX XX XX XX XX XX XX XX (serial number part 1)
+  if(data[0] == 0xAA && data[1] == 0x80 && data[2] == 0xAF) {
+    char serial_part[9];
+    for(int i = 0; i < 8; i++) {
+      serial_part[i] = (data[i+3] >= 32 && data[i+3] <= 126) ? data[i+3] : '.';
+    }
+    serial_part[8] = '\0';
+    snprintf(packet_name_buffer, sizeof(packet_name_buffer), "rx_ser_no_1 (%s)", serial_part);
+    return packet_name_buffer;
+  }
+  
+  // RX Serial Number 2: AA 80 B7 XX XX XX XX XX XX XX XX (serial number part 2)
+  if(data[0] == 0xAA && data[1] == 0x80 && data[2] == 0xB7) {
+    char serial_part[9];
+    for(int i = 0; i < 8; i++) {
+      serial_part[i] = (data[i+3] >= 32 && data[i+3] <= 126) ? data[i+3] : '.';
+    }
+    serial_part[8] = '\0';
+    snprintf(packet_name_buffer, sizeof(packet_name_buffer), "rx_ser_no_2 (%s)", serial_part);
+    return packet_name_buffer;
+  }
+  
+  // RX Warmup: AA 80 BF FF FF FF FF FF FF FF FF (warmup acknowledgment)
+  if(data[0] == 0xAA && data[1] == 0x80 && data[2] == 0xBF) {
+    return "rx_warmup";
+  }
+  
   // Other RX packets (exact matches for now)
   if(memcmp(data, rx_led_on_conf, 11) == 0) return "rx_led_on_conf";
-  if(memcmp(data, rx_warmup_1, 11) == 0) return "rx_warmup_1";
-  if(memcmp(data, rx_warmup_2, 11) == 0) return "rx_warmup_2";
-  if(memcmp(data, rx_warmup_3, 11) == 0) return "rx_warmup_3";
   if(memcmp(data, rx_warmup_complete, 11) == 0) return "rx_warmup_complete";
   if(memcmp(data, rx_startup_comp, 11) == 0) return "rx_startup_comp";
   

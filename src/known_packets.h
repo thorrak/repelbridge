@@ -43,39 +43,39 @@ const uint8_t rx_led_on_conf[] = {
 
 
 
-// Version Info Packets
+// Serial Number Request Packets
 
-// [00217314] RX: AA 05 AF 01 00 00 00 00 00 00 00 (UNKNOWN) [11 bytes]
-const uint8_t tx_warmup_1[] = {
+// [00217314] RX: AA 05 AF 01 00 00 00 00 00 00 00 - Request first part of serial number
+const uint8_t tx_ser_no_1[] = {
     0xAA, 0x05, 0xAF, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
-// [00217336] RX: AA 80 AF 52 45 50 31 41 46 30 35 (UNKNOWN) [11 bytes]
-const uint8_t rx_warmup_1[] = {
+// [00217336] RX: AA 80 AF 52 45 50 31 41 46 30 35 - First part of serial number response
+const uint8_t rx_ser_no_1[] = {
     0xAA, 0x80, 0xAF, 0x52, 0x45, 0x50, 0x31, 0x41, 0x46, 0x30, 0x35
 };
 
 
-// [00217444] RX: AA 05 B7 01 00 00 00 00 00 00 00 (UNKNOWN) [11 bytes]
-const uint8_t tx_warmup_2[] = {
+// [00217444] RX: AA 05 B7 01 00 00 00 00 00 00 00 - Request second part of serial number
+const uint8_t tx_ser_no_2[] = {
     0xAA, 0x05, 0xB7, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
 
-// [00217467] RX: AA 80 B7 42 41 41 37 33 30 33 00 (UNKNOWN) [11 bytes]
-const uint8_t rx_warmup_2[] = {
+// [00217467] RX: AA 80 B7 42 41 41 37 33 30 33 00 - Second part of serial number response
+const uint8_t rx_ser_no_2[] = {
     0xAA, 0x80, 0xB7, 0x42, 0x41, 0x41, 0x37, 0x33, 0x30, 0x33, 0x00
 };
 
 
-// [00217574] RX: AA 05 BF 01 00 00 00 00 00 00 00 (UNKNOWN) [11 bytes]
-const uint8_t tx_warmup_3[] = {
+// [00217574] RX: AA 05 BF 01 00 00 00 00 00 00 00 - Start warmup command
+const uint8_t tx_warmup[] = {
     0xAA, 0x05, 0xBF, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
 
-// [00217598] RX: AA 80 BF FF FF FF FF FF FF FF FF (UNKNOWN) [11 bytes]
-const uint8_t rx_warmup_3[] = {
+// [00217598] RX: AA 80 BF FF FF FF FF FF FF FF FF - Warmup acknowledgment
+const uint8_t rx_warmup[] = {
     0xAA, 0x80, 0xBF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
 

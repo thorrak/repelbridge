@@ -122,24 +122,24 @@ static const char* identifyPacket(const uint8_t* data, size_t length) {
     return packet_name_buffer;
   }
   
-  // TX Warmup 1: AA XX AF 01 00 00 00 00 00 00 00 (XX=address)
+  // TX Serial Number 1: AA XX AF 01 00 00 00 00 00 00 00 (XX=address)
   if(data[0] == 0xAA && data[1] <= 0x7E && data[2] == 0xAF && 
-     memcmp(&data[3], &tx_warmup_1[3], 8) == 0) {
-    snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_warmup_1:%02X", data[1]);
+     memcmp(&data[3], &tx_ser_no_1[3], 8) == 0) {
+    snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_ser_no_1:%02X", data[1]);
     return packet_name_buffer;
   }
   
-  // TX Warmup 2: AA XX B7 01 00 00 00 00 00 00 00 (XX=address)
+  // TX Serial Number 2: AA XX B7 01 00 00 00 00 00 00 00 (XX=address)
   if(data[0] == 0xAA && data[1] <= 0x7E && data[2] == 0xB7 && 
-     memcmp(&data[3], &tx_warmup_2[3], 8) == 0) {
-    snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_warmup_2:%02X", data[1]);
+     memcmp(&data[3], &tx_ser_no_2[3], 8) == 0) {
+    snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_ser_no_2:%02X", data[1]);
     return packet_name_buffer;
   }
   
-  // TX Warmup 3: AA XX BF 01 00 00 00 00 00 00 00 (XX=address)
+  // TX Warmup: AA XX BF 01 00 00 00 00 00 00 00 (XX=address)
   if(data[0] == 0xAA && data[1] <= 0x7E && data[2] == 0xBF && 
-     memcmp(&data[3], &tx_warmup_3[3], 8) == 0) {
-    snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_warmup_3:%02X", data[1]);
+     memcmp(&data[3], &tx_warmup[3], 8) == 0) {
+    snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_warmup:%02X", data[1]);
     return packet_name_buffer;
   }
   
@@ -170,11 +170,35 @@ static const char* identifyPacket(const uint8_t* data, size_t length) {
     return packet_name_buffer;
   }
   
+  // RX Serial Number 1: AA 80 AF XX XX XX XX XX XX XX XX (serial number part 1)
+  if(data[0] == 0xAA && data[1] == 0x80 && data[2] == 0xAF) {
+    char serial_part[9];
+    for(int i = 0; i < 8; i++) {
+      serial_part[i] = (data[i+3] >= 32 && data[i+3] <= 126) ? data[i+3] : '.';
+    }
+    serial_part[8] = '\0';
+    snprintf(packet_name_buffer, sizeof(packet_name_buffer), "rx_ser_no_1 (%s)", serial_part);
+    return packet_name_buffer;
+  }
+  
+  // RX Serial Number 2: AA 80 B7 XX XX XX XX XX XX XX XX (serial number part 2)
+  if(data[0] == 0xAA && data[1] == 0x80 && data[2] == 0xB7) {
+    char serial_part[9];
+    for(int i = 0; i < 8; i++) {
+      serial_part[i] = (data[i+3] >= 32 && data[i+3] <= 126) ? data[i+3] : '.';
+    }
+    serial_part[8] = '\0';
+    snprintf(packet_name_buffer, sizeof(packet_name_buffer), "rx_ser_no_2 (%s)", serial_part);
+    return packet_name_buffer;
+  }
+  
+  // RX Warmup: AA 80 BF FF FF FF FF FF FF FF FF (warmup acknowledgment)
+  if(data[0] == 0xAA && data[1] == 0x80 && data[2] == 0xBF) {
+    return "rx_warmup";
+  }
+  
   // Other RX packets (exact matches for now)
   if(memcmp(data, rx_led_on_conf, 11) == 0) return "rx_led_on_conf";
-  if(memcmp(data, rx_warmup_1, 11) == 0) return "rx_warmup_1";
-  if(memcmp(data, rx_warmup_2, 11) == 0) return "rx_warmup_2";
-  if(memcmp(data, rx_warmup_3, 11) == 0) return "rx_warmup_3";
   if(memcmp(data, rx_warmup_complete, 11) == 0) return "rx_warmup_complete";
   if(memcmp(data, rx_startup_comp, 11) == 0) return "rx_startup_comp";
   
@@ -261,16 +285,16 @@ void send_tx_led_on_conf() {
   transmit_packet(tx_led_on_conf, sizeof(tx_led_on_conf));
 }
 
-void send_tx_warmup_1() {
-  transmit_packet(tx_warmup_1, sizeof(tx_warmup_1));
+void send_tx_ser_no_1() {
+  transmit_packet(tx_ser_no_1, sizeof(tx_ser_no_1));
 }
 
-void send_tx_warmup_2() {
-  transmit_packet(tx_warmup_2, sizeof(tx_warmup_2));
+void send_tx_ser_no_2() {
+  transmit_packet(tx_ser_no_2, sizeof(tx_ser_no_2));
 }
 
-void send_tx_warmup_3() {
-  transmit_packet(tx_warmup_3, sizeof(tx_warmup_3));
+void send_tx_warmup() {
+  transmit_packet(tx_warmup, sizeof(tx_warmup));
 }
 
 void send_tx_warmup_complete() {
@@ -411,14 +435,14 @@ void full_startup() {
   delay(600);
   send_tx_powerup();
   delay(100);  // Wait for powerup response
-  send_tx_warmup_1();
-  receive_and_print("rx_warmup_1", 500);
+  send_tx_ser_no_1();
+  receive_and_print("rx_ser_no_1", 500);
   delay(100);
-  send_tx_warmup_2();
-  receive_and_print("rx_warmup_2", 500);
+  send_tx_ser_no_2();
+  receive_and_print("rx_ser_no_2", 500);
   delay(100);
-  send_tx_warmup_3();
-  receive_and_print("rx_warmup_3", 500);
+  send_tx_warmup();
+  receive_and_print("rx_warmup", 500);
   delay(100);
 
   send_tx_heartbeat();
