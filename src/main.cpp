@@ -54,9 +54,9 @@ void loop() {
     static unsigned long last_heartbeat = 0;
     unsigned long current_time = millis();
     
-    if (current_time - last_heartbeat > 60000) {
-      // Serial.println("Sending periodic heartbeat...");
-      // send_tx_heartbeat();
+    if (current_time - last_heartbeat > 15000) {
+      Serial.println("Sending periodic heartbeat...");
+      heartbeat_poll();  // Poll the heartbeat status of all repellers
       last_heartbeat = current_time;
     }
     

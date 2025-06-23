@@ -19,6 +19,7 @@ public:
   uint8_t address;
   char serial[16];
   RepellerState state;
+  uint64_t turned_on_at;
   
   // Constructor - requires address, initializes serial to blank and state to inactive
   Repeller(uint8_t addr) : address(addr), state(INACTIVE) {

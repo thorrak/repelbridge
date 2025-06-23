@@ -32,10 +32,6 @@ void send_tx_discover() {
   packet.transmit();
 }
 
-// void send_tx_startup_comp() {
-//   transmit_packet(tx_startup_comp, sizeof(tx_startup_comp));
-// }
-
 void send_tx_powerup() {
   Packet packet;
   packet.setAsTxPowerup();
@@ -46,13 +42,17 @@ void send_tx_powerup() {
 //   Packet(tx_powerdown).transmit();
 // }
 
-// void send_tx_heartbeat() {
-//   transmit_packet(tx_heartbeat, sizeof(tx_heartbeat));
-// }
+void send_tx_heartbeat(uint8_t address) {
+  Packet packet;
+  packet.setAsTxHeartbeat(address);
+  packet.transmit();
+}
 
-// void send_tx_led_on_conf() {
-//   transmit_packet(tx_led_on_conf, sizeof(tx_led_on_conf));
-// }
+void send_tx_led_on_conf(uint8_t address) {
+  Packet packet;
+  packet.setAsTxLEDOnConf(address);
+  packet.transmit();
+}
 
 void send_tx_ser_no_1(uint8_t address) {
   Packet packet;
@@ -72,9 +72,11 @@ void send_tx_warmup(uint8_t address) {
   packet.transmit();
 }
 
-// void send_tx_warmup_complete() {
-//   transmit_packet(tx_warmup_complete, sizeof(tx_warmup_complete));
-// }
+void send_tx_warmup_complete(uint8_t address) {
+  Packet packet;
+  packet.setAsTxWarmupComp(address);
+  packet.transmit();
+}
 
 // // Dynamic packet transmission functions
 // void send_tx_led(uint8_t brightness) {
@@ -82,21 +84,28 @@ void send_tx_warmup(uint8_t address) {
 //   transmit_packet(packet, sizeof(packet));
 // }
 
-// void send_tx_led_startup(uint8_t brightness) {
-//   uint8_t packet[] = {0xAA, 0x05, 0x05, brightness, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00};
-//   transmit_packet(packet, sizeof(packet));
-// }
+void send_tx_led_startup(uint8_t address, uint8_t brightness) {
+  Packet packet;
+  packet.setAsTxLEDStartup(address, brightness);
+  packet.transmit();
+}
 
 // void send_tx_color(uint8_t red, uint8_t green, uint8_t blue) {
 //   uint8_t packet[] = {0xAA, 0x8E, 0x06, red, green, blue, 0x00, 0x00, 0x00, 0x00, 0x00};
 //   transmit_packet(packet, sizeof(packet));
 // }
 
-// void send_tx_color_startup(uint8_t red, uint8_t green, uint8_t blue) {
-//   uint8_t packet[] = {0xAA, 0x05, 0x06, red, green, blue, 0x00, 0x00, 0x00, 0x00, 0x00};
-//   transmit_packet(packet, sizeof(packet));
-// }
+void send_tx_color_startup(uint8_t address, uint8_t red, uint8_t green, uint8_t blue) {
+  Packet packet;
+  packet.setAsTxColorStartup(address, red, green, blue);
+  packet.transmit();
+}
 
+void send_tx_startup_comp(uint8_t address) {
+  Packet packet;
+  packet.setAsTxStartupComp(address);
+  packet.transmit();
+}
 
 
 // void full_startup() {
@@ -262,8 +271,116 @@ void send_tx_warmup(Repeller* repeller) {
   } else {
     Serial.printf("Repeller 0x%02X failed to respond to TX_WARMUP\n", repeller->address);
   }
-
 }
+
+void send_startup_led_params(Repeller* repeller) {
+  if (!repeller) {
+    Serial.println("Invalid repeller pointer");
+    return;
+  }
+  
+  Serial.printf("Setting startup LED parameters for repeller 0x%02X...\n", repeller->address);
+  
+  // There are three parts to this:
+  // 1. Send tx_color_startup with red, green, blue values and then look for rx_color_startup
+  Serial.printf("Setting startup color for repeller 0x%02X...\n", repeller->address);
+  // TODO - Come back later when we productionize this, and actually cache the controller color somewhere
+  send_tx_color_startup(repeller->address, 0x42, 0x90, 0xf5); // Soft blue color
+  
+  Packet response_packet;
+  if (receive_packet(response_packet, 1000)) {
+    if (response_packet.identifyPacket() == RX_COLOR_STARTUP) {
+      // Note - The response contains the color values as well (I think??), but the colors do not necessarily match what we sent
+      // For now, I'm just ignoring them.
+      Serial.printf("Repeller 0x%02X confirmed startup color\n", repeller->address);
+    } else {
+      Serial.printf("Repeller 0x%02X sent unexpected color response: ", repeller->address);
+      response_packet.print();
+    }
+  } else {
+    Serial.printf("No color startup response from repeller 0x%02X\n", repeller->address);
+  }
+  
+  // 2. Send tx_led_startup with brightness value and then look for rx_led_startup
+  Serial.printf("Setting startup brightness for repeller 0x%02X...\n", repeller->address);
+  // TODO - Come back later when we productionize this, and actually cache the controller brightness somewhere
+  send_tx_led_startup(repeller->address, 100); // Full brightness (100 = 0x64 = 100%)
+  
+  if (receive_packet(response_packet, 1000)) {
+    if (response_packet.identifyPacket() == RX_LED_STARTUP) {
+      Serial.printf("Repeller 0x%02X confirmed startup brightness\n", repeller->address);
+    } else {
+      Serial.printf("Repeller 0x%02X sent unexpected brightness response: ", repeller->address);
+      response_packet.print();
+    }
+  } else {
+    Serial.printf("No LED startup response from repeller 0x%02X\n", repeller->address);
+  }
+  
+  // 3. Send tx_startup_comp and then look for rx_startup_comp
+  Serial.printf("Sending startup complete to repeller 0x%02X...\n", repeller->address);
+  send_tx_startup_comp(repeller->address);
+  
+  if (receive_packet(response_packet, 1000)) {
+    if (response_packet.identifyPacket() == RX_STARTUP_COMP) {
+      Serial.printf("Repeller 0x%02X confirmed startup complete\n", repeller->address);
+    } else {
+      Serial.printf("Repeller 0x%02X sent unexpected startup complete response: ", repeller->address);
+      response_packet.print();
+    }
+  } else {
+    Serial.printf("No startup complete response from repeller 0x%02X\n", repeller->address);
+  }
+  
+  Serial.printf("LED parameter setup complete for repeller 0x%02X\n", repeller->address);
+}
+
+
+void send_activate_at_end_of_warmup(Repeller *repeller) {
+  if (!repeller) {
+    Serial.println("Invalid repeller pointer");
+    return;
+  }
+
+  Serial.printf("Activating repeller 0x%02X at end of warmup...\n", repeller->address);
+
+  // This function is called after every repeller has been warmed up to actually activate the repeller
+  // Not sure if this does anything other than turn on the LEDs, but that's enough!
+
+  // 1. send_tx_warmup_complete and look for RX_WARMUP_COMPLETE
+  Serial.printf("Sending warmup complete to repeller 0x%02X...\n", repeller->address);
+  send_tx_warmup_complete(repeller->address);
+  
+  Packet response_packet;
+  if (receive_packet(response_packet, 1000)) {
+    if (response_packet.identifyPacket() == RX_WARMUP_COMPLETE) {
+      Serial.printf("Repeller 0x%02X confirmed warmup complete\n", repeller->address);
+    } else {
+      Serial.printf("Repeller 0x%02X sent unexpected warmup complete response: ", repeller->address);
+      response_packet.print();
+    }
+  } else {
+    Serial.printf("No warmup complete response from repeller 0x%02X\n", repeller->address);
+  }
+  
+  // 2. send_tx_led_on_conf and look for RX_LED_ON_CONF
+  Serial.printf("Sending LED on confirmation to repeller 0x%02X...\n", repeller->address);
+  send_tx_led_on_conf(repeller->address);
+  
+  if (receive_packet(response_packet, 1000)) {
+    if (response_packet.identifyPacket() == RX_LED_ON_CONF) {
+      Serial.printf("Repeller 0x%02X confirmed LED activation\n", repeller->address);
+    } else {
+      Serial.printf("Repeller 0x%02X sent unexpected LED on response: ", repeller->address);
+      response_packet.print();
+    }
+  } else {
+    Serial.printf("No LED on confirmation response from repeller 0x%02X\n", repeller->address);
+  }
+  
+  Serial.printf("Activation complete for repeller 0x%02X\n", repeller->address);
+}
+
 
 void retrieve_serial_for_all() {
   Serial.println("Retrieving serial numbers for all discovered repellers...");
@@ -289,10 +406,112 @@ void warm_up_all() {
   send_tx_powerup();  // This is the command that actually powers up the repellers
   
   for (auto& repeller : repellers) {
+    repeller.state = WARMING_UP;
+    repeller.turned_on_at = esp_timer_get_time();  // Record the time when the repeller was turned on
     Serial.printf("Sending warmup instruction to repeller at address 0x%02X...\n", repeller.address);
     send_tx_warmup(&repeller);  // Not sure entirely what this does
   }
   
-  Serial.println("Sent warmup to all repellers.");
+  delay(4000);  // Wait for 4 seconds to allow warmup to start
+
+  for (auto& repeller : repellers) {
+    Serial.printf("Sending LED parameters to repeller at address 0x%02X...\n", repeller.address);
+    send_startup_led_params(&repeller);
+  }
+
+  Serial.println("Sent warmup & initial LED instructions to all repellers.");
 }
 
+void end_warm_up_all() {
+  Serial.println("Activating all repellers (ending warm up)...");
+
+  send_tx_powerup();  // This is the command that actually powers up the repellers
+  
+  for (auto& repeller : repellers) {
+    repeller.state = ACTIVE;
+    Serial.printf("Activating (ending warm up) repeller at address 0x%02X...\n", repeller.address);
+    send_activate_at_end_of_warmup(&repeller);
+  }
+
+  Serial.println("Activated all repellers.");
+}
+
+
+void heartbeat_poll() {
+  // Send the heartbeat command (`send_tx_heartbeat`) to each repeller, and read the response. Update the status of each repeller based on the response.
+  // If the response is RX_WARMUP, the state is WARMING_UP.
+  // If the response is RX_WARMUP_COMP, the state is WARMED_UP
+  // If the response is RX_ACTIVE, the state is ACTIVE
+  // If no response is received, the state is OFFLINE. We'll need to add handling for this later. 
+
+  Serial.println("Starting heartbeat poll...");
+  
+  for (auto& repeller : repellers) {
+    Serial.printf("Sending heartbeat to repeller 0x%02X...\n", repeller.address);
+    
+    // Send heartbeat command
+    send_tx_heartbeat(repeller.address);
+    
+    // Wait for response
+    Packet response_packet;
+    if (receive_packet(response_packet, 1000)) {
+      PacketType packet_type = response_packet.identifyPacket();
+
+      // For now, output the packet itself to the console
+      Serial.printf("Received response from repeller 0x%02X: ", repeller.address);
+      response_packet.print();
+      
+      switch (packet_type) {
+        case RX_WARMUP:
+          repeller.state = WARMING_UP;
+          Serial.printf("Repeller 0x%02X is warming up\n", repeller.address);
+          break;
+          
+        case RX_WARMUP_COMP:
+          repeller.state = WARMED_UP;
+          Serial.printf("Repeller 0x%02X is warmed up\n", repeller.address);
+          break;
+          
+        case RX_RUNNING:  // Assuming RX_RUNNING means ACTIVE
+          repeller.state = ACTIVE;
+          Serial.printf("Repeller 0x%02X is active\n", repeller.address);
+          break;
+          
+        default:
+          Serial.printf("Repeller 0x%02X sent unexpected response: ", repeller.address);
+          response_packet.print();
+          break;
+      }
+    } else {
+      // No response received - state remains as is for now
+      Serial.printf("No response from repeller 0x%02X\n", repeller.address);
+    }
+  }
+
+  // Once we have finished the heartbeat poll, loop over each repeller in the list. If any repeller is in the WARMING_UP state, set any_warming_up to true.
+  // If any repeller is in the WARMED_UP state, set any_warmed_up to true.
+  // Once this is done, we'll need to handle actually setting the controllers to active when any_warmed_up is true and any_warming_up is false. We'll do this later.
+  bool any_warming_up = false;
+  bool any_warmed_up = false;
+  
+  for (const auto& repeller : repellers) {
+    if (repeller.state == WARMING_UP) {
+      any_warming_up = true;
+    }
+    if (repeller.state == WARMED_UP) {
+      any_warmed_up = true;
+    }
+  }
+
+  if(!any_warming_up && any_warmed_up) {
+    // All repellers are warmed up and none are warming up, so we can activate them
+    Serial.println("All repellers warmed up, activating...");
+    end_warm_up_all();
+  } else{
+    Serial.printf("Heartbeat poll complete. Warming up: %s, Warmed up: %s\n", 
+                  any_warming_up ? "true" : "false", 
+                  any_warmed_up ? "true" : "false");
+  }
+  
+
+}
