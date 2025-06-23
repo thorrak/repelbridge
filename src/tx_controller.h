@@ -5,7 +5,7 @@
 #include "packet.h"
 
 // Initialize the transmitter (call this in setup)
-void tx_controller_init();
+void tx_controller_init(uint8_t bus);
 
 // Fixed packet transmission functions
 void send_tx_startup();

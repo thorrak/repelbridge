@@ -4,17 +4,17 @@
 This project emulates a controller for a device called the "Liv Repeller" using reverse-engineered RS-485 communication protocols. The goal is to create an ESP32-based controller that can communicate with and control Liv Repeller devices.
 
 ## Hardware Setup
-- **ESP32 Development Board** (targets `esp32dev` in platformio.ini)
+- **ESP32-C6 Development Board** (targets `esp32-c6-devkitc-1` in platformio.ini)
 - **MAX3485 RS-485 Transceiver** on a breakout board
 - **RS-485 Bus Connection** to monitor/control Liv Repeller devices
 
 ### Pin Connections
 ```
-MAX3485 → ESP32
+MAX3485 → ESP32-C6
 - A/B terminals → RS-485 bus (differential pair)
-- RO (Receive Output) → GPIO16 (Serial2 RX)
-- DI (Driver Input) → GPIO17 (Serial2 TX)
-- DE/RE (tied together) → GPIO4 (Direction control)
+- RO (Receive Output) → GPIO22 (Serial1 RX)
+- DI (Driver Input) → GPIO19 (Serial1 TX)
+- DE/RE (tied together) → GPIO21 (Direction control)
 - VCC → 3.3V or 5V
 - GND → Ground
 ```
@@ -118,7 +118,7 @@ Change `CURRENT_MODE` in `main.cpp`:
 
 ### PlatformIO Configuration
 - **Platform**: espressif32
-- **Board**: esp32dev
+- **Board**: esp32-c6-devkitc-1
 - **Framework**: arduino
 - **Monitor Speed**: 115200
 

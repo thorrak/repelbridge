@@ -1,10 +1,10 @@
 #include "sniffer_mode.h"
 #include "packet.h"
 
-// MAX3485 Pin Connections for ESP32
-// RX pin (DI) - connects to ESP32 TX (GPIO17)
-// TX pin (RO) - connects to ESP32 RX (GPIO16)  
-// DE and RE pins (tied together) - connects to GPIO4 (RS485_DIRECTION_PIN)
+// MAX3485 Pin Connections for ESP32-C6
+// RX pin (DI) - connects to ESP32-C6 TX (GPIO19)
+// TX pin (RO) - connects to ESP32-C6 RX (GPIO22)  
+// DE and RE pins (tied together) - connects to GPIO21 (BUS_1_DIR_PIN)
 
 // Buffer for incoming data
 static const size_t BUFFER_SIZE = 256;
@@ -44,16 +44,20 @@ void sniffer_setup() {
   Serial.println("----------------------------------------");
 
   // Set DE/RE control pin as output and keep in receive mode
-  pinMode(RS485_DIRECTION_PIN, OUTPUT);
-  digitalWrite(RS485_DIRECTION_PIN, LOW);  // Always in receive mode for sniffer
+  pinMode(BUS_1_DIR_PIN, OUTPUT);
+  digitalWrite(BUS_1_DIR_PIN, LOW);  // Always in receive mode for sniffer
+#ifdef BUS_2_DIR_PIN
+  pinMode(BUS_2_DIR_PIN, OUTPUT);
+  digitalWrite(BUS_2_DIR_PIN, LOW);  // Always in receive mode for sniffer
+#endif
 
-  // Initialize Serial2 for RS-485 communication
-  // ESP32 Serial2 uses GPIO16 (RX) and GPIO17 (TX) by default
-  Serial2.begin(19200, SERIAL_8N1, 16, 17);  // RX=16, TX=17
+  // Initialize Serial1 for RS-485 communication
+  // ESP32-C6 Serial1 configured for custom pins
+  Serial1.begin(19200, SERIAL_8N1, BUS_1_RX_PIN, BUS_1_TX_PIN);  // RX=22, TX=19
   
   // Clear any existing data
-  while(Serial2.available()) {
-    Serial2.read();
+  while(Serial1.available()) {
+    Serial1.read();
   }
   
   delay(100);
@@ -69,8 +73,8 @@ void sniffer_loop() {
   }
   
   // Read available data
-  while(Serial2.available()) {
-    uint8_t byte_received = Serial2.read();
+  while(Serial1.available()) {
+    uint8_t byte_received = Serial1.read();
     current_time = millis();
     
     // If we haven't received data for a while, this might be a new packet

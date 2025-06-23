@@ -4,16 +4,23 @@
 #include "packet.h"
 #include "receive.h"
 
-void tx_controller_init() {
-  pinMode(RS485_DIRECTION_PIN, OUTPUT);
-  digitalWrite(RS485_DIRECTION_PIN, LOW);  // Start in receive mode
+void tx_controller_init(uint8_t bus) {
+  pinMode(BUS_1_DIR_PIN, OUTPUT);
+  digitalWrite(BUS_1_DIR_PIN, LOW);  // Start in receive mode
   
-  // Initialize Serial2 for RS-485 communication
-  Serial2.begin(19200, SERIAL_8N1, 16, 17);  // RX=16, TX=17
-  
+  // Initialize Serial1 for RS-485 communication
+#ifdef BUS_2_TX_PIN
+  pinMode(BUS_2_DIR_PIN, OUTPUT);
+  digitalWrite(BUS_2_DIR_PIN, LOW);  // Start in receive mode
+
+  if(bus == 2) 
+    Serial1.begin(19200, SERIAL_8N1, BUS_2_RX_PIN, BUS_2_TX_PIN);  // RX=22, TX=19
+  else
+#endif
+    Serial1.begin(19200, SERIAL_8N1, BUS_1_RX_PIN, BUS_1_TX_PIN);  // RX=22, TX=19
   // Clear any existing data
-  while(Serial2.available()) {
-    Serial2.read();
+  while(Serial1.available()) {
+    Serial1.read();
   }
 }
 

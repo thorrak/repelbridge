@@ -29,7 +29,10 @@ bool receive_packet(Packet& packet, uint16_t timeout_ms) {
   unsigned long current_time;
   
   // Ensure we're in receive mode
-  digitalWrite(RS485_DIRECTION_PIN, LOW);
+  digitalWrite(BUS_1_DIR_PIN, LOW);  // TODO - Detect the appropriate bus and only toggle that pin
+  #ifdef BUS_2_DIR_PIN
+  digitalWrite(BUS_2_DIR_PIN, LOW);  // TODO - Detect the appropriate bus and only toggle that pin
+  #endif
   
   while (true) {
     current_time = millis();
@@ -55,8 +58,8 @@ bool receive_packet(Packet& packet, uint16_t timeout_ms) {
     }
     
     // Read available data
-    while (Serial2.available()) {
-      uint8_t byte_received = Serial2.read();
+    while (Serial1.available()) {
+      uint8_t byte_received = Serial1.read();
       current_time = millis();
       
       // If we haven't received data for a while, this might be a new packet

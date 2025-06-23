@@ -11,6 +11,8 @@
 
 void setup() {
   Serial.begin(115200);
+  delay(5000);
+  Serial.println("Initializing...");
   
   if (CURRENT_MODE == MODE_SNIFFER) {
     Serial.println("Starting in SNIFFER mode...");
@@ -19,10 +21,10 @@ void setup() {
     Serial.println("Starting in CONTROLLER mode...");
     Serial.println("Initializing controller emulation...");
     
-    delay(4000);
+    delay(1000);
 
     // Initialize the transmitter
-    tx_controller_init();  // GPIO4 for DE/RE control
+    tx_controller_init(1);  // GPIO4 for DE/RE control
     
     Serial.println("Running full startup sequence...");
     delay(1000);  // Give time to see the message
