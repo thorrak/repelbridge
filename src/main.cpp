@@ -7,7 +7,7 @@
 #define MODE_CONTROLLER 1
 
 // Set the desired mode here
-#define CURRENT_MODE       MODE_SNIFFER
+#define CURRENT_MODE       MODE_CONTROLLER
 
 void setup() {
   Serial.begin(115200);
@@ -22,20 +22,22 @@ void setup() {
     delay(4000);
 
     // Initialize the transmitter
-    tx_controller_init(4);  // GPIO4 for DE/RE control
+    tx_controller_init();  // GPIO4 for DE/RE control
     
     Serial.println("Running full startup sequence...");
     delay(1000);  // Give time to see the message
     
+    discover_repellers();
+    retrieve_serial_for_all();
+    warm_up_all();
+    // full_poweron();
+    // delay(10000);
 
-    full_poweron();
-    delay(10000);
+    // // Run the full startup sequence
+    // full_startup();
 
-    // Run the full startup sequence
-    full_startup();
-
-    delay(20000);
-    send_tx_powerdown();
+    // delay(20000);
+    // send_tx_powerdown();
     
     Serial.println("Full startup sequence completed!");
   }
