@@ -21,30 +21,30 @@ PacketType Packet::identifyPacket() const {
   // Check for LED brightness messages (addressing aware)
   // TX LED: AA XX 05 YY 00 00 00 00 00 00 00 (XX=address, YY=brightness)
   if(address <= 0x7E && data[2] == 0x05 && rest_zero(data, 4)) {
-    return TX_LED;
+    return TX_LED_BRIGHTNESS;
   }
   
   // RX LED: AA 80 05 XX 00 00 00 00 00 00 00 (XX=brightness)
   if(address == 0x80 && data[2] == 0x05 && rest_zero(data, 4)) {
-    return RX_LED;
+    return RX_LED_BRIGHTNESS;
   }
   
   // TX LED Startup: AA XX 05 YY 00 FF 00 00 00 00 00 (XX=address, YY=brightness)
   if(address <= 0x7E && data[2] == 0x05 && data[4] == 0x00 && 
      data[5] == 0xFF && rest_zero(data, 6)) {
-    return TX_LED_STARTUP;
+    return TX_LED_BRIGHTNESS_STARTUP;
   }
   
   // RX LED Startup: AA 80 05 XX 00 FF 00 00 00 00 00 (XX=brightness)
   if(address == 0x80 && data[2] == 0x05 && data[4] == 0x00 && 
     data[5] == 0xFF && rest_zero(data, 6)) {
-    return RX_LED_STARTUP;
+    return RX_LED_BRIGHTNESS_STARTUP;
   }
   
   // RX Running: AA 80 01 04 03 XX 00 00 00 00 00
   if(address == 0x80 && data[2] == 0x01 && 
      data[3] == 0x04 && data[4] == 0x03 && rest_zero(data, 6)) {
-    return RX_RUNNING;
+    return RX_HEARTBEAT_RUNNING;
   }
 
   // RX Warming Up: AA 80 01 02 XX YY 00 00 00 00 00
@@ -163,20 +163,20 @@ const char* Packet::packetName() const {
   PacketType type = identifyPacket();
   
   switch(type) {
-    case TX_LED:
-      snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_led:%02X (%d)", data[1], data[3]);
+    case TX_LED_BRIGHTNESS:
+      snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_led_brightness:%02X (%d)", data[1], data[3]);
       break;
-    case RX_LED:
-      snprintf(packet_name_buffer, sizeof(packet_name_buffer), "rx_led (%d)", data[3]);
+    case RX_LED_BRIGHTNESS:
+      snprintf(packet_name_buffer, sizeof(packet_name_buffer), "rx_led_brightness (%d)", data[3]);
       break;
-    case TX_LED_STARTUP:
-      snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_led_startup:%02X (%d)", data[1], data[3]);
+    case TX_LED_BRIGHTNESS_STARTUP:
+      snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_led_brightness_startup:%02X (%d)", data[1], data[3]);
       break;
-    case RX_LED_STARTUP:
-      snprintf(packet_name_buffer, sizeof(packet_name_buffer), "rx_led_startup (%d)", data[3]);
+    case RX_LED_BRIGHTNESS_STARTUP:
+      snprintf(packet_name_buffer, sizeof(packet_name_buffer), "rx_led_brightness_startup (%d)", data[3]);
       break;
-    case RX_RUNNING:
-      snprintf(packet_name_buffer, sizeof(packet_name_buffer), "rx_running (%d)", data[5]);
+    case RX_HEARTBEAT_RUNNING:
+      snprintf(packet_name_buffer, sizeof(packet_name_buffer), "rx_heartbeat_running (%d)", data[5]);
       break;
     case RX_WARMUP:
       if(data[1] == 0x80 && data[2] == 0x01) {
@@ -288,9 +288,9 @@ void Packet::print() const {
 
 void Packet::transmit() {
   // Set RS-485 transceiver to transmit mode
+  digitalWrite(BUS_0_DIR_PIN, HIGH);  // TODO - Detect the appropriate bus and only toggle that pin
+  #ifdef BUS_1_DIR_PIN
   digitalWrite(BUS_1_DIR_PIN, HIGH);  // TODO - Detect the appropriate bus and only toggle that pin
-  #ifdef BUS_2_DIR_PIN
-  digitalWrite(BUS_2_DIR_PIN, HIGH);  // TODO - Detect the appropriate bus and only toggle that pin
   #endif
   delayMicroseconds(10);  // Give DE time to enable
   
@@ -300,9 +300,9 @@ void Packet::transmit() {
   
   // Back to receive mode
   delayMicroseconds(10);  // Give time for transmission to complete
+  digitalWrite(BUS_0_DIR_PIN, LOW);  // TODO - Detect the appropriate bus and only toggle that pin
+#ifdef BUS_1_DIR_PIN
   digitalWrite(BUS_1_DIR_PIN, LOW);  // TODO - Detect the appropriate bus and only toggle that pin
-#ifdef BUS_2_DIR_PIN
-  digitalWrite(BUS_2_DIR_PIN, LOW);  // TODO - Detect the appropriate bus and only toggle that pin
 #endif
   delay(100);  // Allow some time before next operation
 }

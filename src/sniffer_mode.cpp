@@ -4,7 +4,7 @@
 // MAX3485 Pin Connections for ESP32-C6
 // RX pin (DI) - connects to ESP32-C6 TX (GPIO19)
 // TX pin (RO) - connects to ESP32-C6 RX (GPIO22)  
-// DE and RE pins (tied together) - connects to GPIO21 (BUS_1_DIR_PIN)
+// DE and RE pins (tied together) - connects to GPIO21 (BUS_0_DIR_PIN)
 
 // Buffer for incoming data
 static const size_t BUFFER_SIZE = 256;
@@ -44,16 +44,16 @@ void sniffer_setup() {
   Serial.println("----------------------------------------");
 
   // Set DE/RE control pin as output and keep in receive mode
+  pinMode(BUS_0_DIR_PIN, OUTPUT);
+  digitalWrite(BUS_0_DIR_PIN, LOW);  // Always in receive mode for sniffer
+#ifdef BUS_1_DIR_PIN
   pinMode(BUS_1_DIR_PIN, OUTPUT);
   digitalWrite(BUS_1_DIR_PIN, LOW);  // Always in receive mode for sniffer
-#ifdef BUS_2_DIR_PIN
-  pinMode(BUS_2_DIR_PIN, OUTPUT);
-  digitalWrite(BUS_2_DIR_PIN, LOW);  // Always in receive mode for sniffer
 #endif
 
   // Initialize Serial1 for RS-485 communication
   // ESP32-C6 Serial1 configured for custom pins
-  Serial1.begin(19200, SERIAL_8N1, BUS_1_RX_PIN, BUS_1_TX_PIN);  // RX=22, TX=19
+  Serial1.begin(19200, SERIAL_8N1, BUS_0_RX_PIN, BUS_0_TX_PIN);  // RX=22, TX=19
   
   // Clear any existing data
   while(Serial1.available()) {

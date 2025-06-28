@@ -24,7 +24,7 @@ void setup() {
     delay(1000);
 
     // Initialize the transmitter
-    tx_controller_init(1);  // GPIO4 for DE/RE control
+    tx_controller_init(0);  // Bus 0, GPIO4 for DE/RE control
     
     Serial.println("Running full startup sequence...");
     delay(1000);  // Give time to see the message

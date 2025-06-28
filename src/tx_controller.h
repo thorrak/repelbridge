@@ -7,8 +7,7 @@
 // Initialize the transmitter (call this in setup)
 void tx_controller_init(uint8_t bus);
 
-// Fixed packet transmission functions
-void send_tx_startup();
+// Individual packet transmission functions
 void send_tx_powerup();
 void send_tx_powerdown();
 void send_tx_heartbeat(uint8_t address);
@@ -21,25 +20,19 @@ void send_tx_color(uint8_t red, uint8_t green, uint8_t blue);
 void send_tx_color_confirm(uint8_t green, uint8_t blue);
 void send_tx_color_startup(uint8_t address, uint8_t red, uint8_t green, uint8_t blue);
 void send_tx_startup_comp(uint8_t address);
+void send_tx_led_brightness(uint8_t address, uint8_t brightness);
+void send_tx_led_brightness_startup(uint8_t address, uint8_t brightness);
 
 // Full functional transmissions
-void full_startup();
-void full_poweron();
 void discover_repellers();
-
 void retrieve_serial_for_all();
 void warm_up_all();
 void end_warm_up_all();
 bool heartbeat_poll();  // Returns true if all repellers are active, false otherwise (including during warmup)
-
 void change_led_brightness(uint8_t brightness_pct);
 void change_led_color(uint8_t red, uint8_t green, uint8_t blue);
 void shutdown_all();
 
-
-// Dynamic packet transmission functions
-void send_tx_led(uint8_t address, uint8_t brightness);
-void send_tx_led_startup(uint8_t address, uint8_t brightness);
 
 
 

@@ -53,7 +53,7 @@ const uint8_t rx_startup_comp[] = {
 
 
 //[00559782] RX: AA 80 01 04 03 87 00 00 00 00 00 (...........) [11 bytes]
-// const uint8_t rx_running[] = {
+// const uint8_t rx_heartbeat_running[] = {
 //     0xAA, 0x80, 0x01, 0x04, 0x03, 0x87, 0x00, 0x00, 0x00, 0x00, 0x00
 // };
 

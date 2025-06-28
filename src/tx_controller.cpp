@@ -5,19 +5,19 @@
 #include "receive.h"
 
 void tx_controller_init(uint8_t bus) {
-  pinMode(BUS_1_DIR_PIN, OUTPUT);
-  digitalWrite(BUS_1_DIR_PIN, LOW);  // Start in receive mode
+  pinMode(BUS_0_DIR_PIN, OUTPUT);
+  digitalWrite(BUS_0_DIR_PIN, LOW);  // Start in receive mode
   
   // Initialize Serial1 for RS-485 communication
-#ifdef BUS_2_TX_PIN
-  pinMode(BUS_2_DIR_PIN, OUTPUT);
-  digitalWrite(BUS_2_DIR_PIN, LOW);  // Start in receive mode
+#ifdef BUS_1_TX_PIN
+  pinMode(BUS_1_DIR_PIN, OUTPUT);
+  digitalWrite(BUS_1_DIR_PIN, LOW);  // Start in receive mode
 
   if(bus == 2) 
-    Serial1.begin(19200, SERIAL_8N1, BUS_2_RX_PIN, BUS_2_TX_PIN);  // RX=22, TX=19
+    Serial1.begin(19200, SERIAL_8N1, BUS_1_RX_PIN, BUS_1_TX_PIN);
   else
 #endif
-    Serial1.begin(19200, SERIAL_8N1, BUS_1_RX_PIN, BUS_1_TX_PIN);  // RX=22, TX=19
+    Serial1.begin(19200, SERIAL_8N1, BUS_0_RX_PIN, BUS_0_TX_PIN);
   // Clear any existing data
   while(Serial1.available()) {
     Serial1.read();
@@ -80,13 +80,13 @@ void send_tx_warmup_complete(uint8_t address) {
   packet.transmit();
 }
 
-void send_tx_led(uint8_t address, uint8_t brightness) {
+void send_tx_led_brightness(uint8_t address, uint8_t brightness) {
   Packet packet;
   packet.setAsTxLED(address, brightness);
   packet.transmit();
 }
 
-void send_tx_led_startup(uint8_t address, uint8_t brightness) {
+void send_tx_led_brightness_startup(uint8_t address, uint8_t brightness) {
   Packet packet;
   packet.setAsTxLEDStartup(address, brightness);
   packet.transmit();
@@ -269,13 +269,13 @@ void send_startup_led_params(Repeller* repeller) {
     Serial.printf("No color startup response from repeller 0x%02X\n", repeller->address);
   }
   
-  // 2. Send tx_led_startup with brightness value and then look for rx_led_startup
+  // 2. Send tx_led_brightness_startup with brightness value and then look for rx_led_brightness_startup
   Serial.printf("Setting startup brightness for repeller 0x%02X...\n", repeller->address);
   // TODO - Come back later when we productionize this, and actually cache the controller brightness somewhere
-  send_tx_led_startup(repeller->address, 100); // Full brightness (100 = 0x64 = 100%)
+  send_tx_led_brightness_startup(repeller->address, 100); // Full brightness (100 = 0x64 = 100%)
   
   if (receive_packet(response_packet, 1000)) {
-    if (response_packet.identifyPacket() == RX_LED_STARTUP) {
+    if (response_packet.identifyPacket() == RX_LED_BRIGHTNESS_STARTUP) {
       Serial.printf("Repeller 0x%02X confirmed startup brightness\n", repeller->address);
     } else {
       Serial.printf("Repeller 0x%02X sent unexpected brightness response: ", repeller->address);
@@ -447,7 +447,7 @@ bool heartbeat_poll() {
           Serial.printf("Repeller 0x%02X is warmed up\n", repeller.address);
           break;
           
-        case RX_RUNNING:  // Assuming RX_RUNNING means ACTIVE
+        case RX_HEARTBEAT_RUNNING:  // Assuming RX_HEARTBEAT_RUNNING means ACTIVE
           repeller.state = ACTIVE;
           Serial.printf("Repeller 0x%02X is active\n", repeller.address);
           break;
@@ -501,15 +501,15 @@ void change_led_brightness(uint8_t brightness_pct) {
   // This function broadcasts the LED brightness change to all devices
   Serial.printf("Changing LED brightness to %d%% for all devices...\n", brightness_pct);
 
-  // 1. send_tx_led for each repeller with the specified brightness, and look for RX_LED
+  // 1. send_tx_led_brightness for each repeller with the specified brightness, and look for RX_LED_BRIGHTNESS
   for (auto& repeller : repellers) {
     if (repeller.state == ACTIVE) {
       Serial.printf("Setting brightness to %d%% for repeller 0x%02X...\n", brightness_pct, repeller.address);
-      send_tx_led(repeller.address, brightness_pct);
+      send_tx_led_brightness(repeller.address, brightness_pct);
       
       Packet response_packet;
       if (receive_packet(response_packet, 1000)) {
-        if (response_packet.identifyPacket() == RX_LED) {
+        if (response_packet.identifyPacket() == RX_LED_BRIGHTNESS) {
           Serial.printf("Repeller 0x%02X confirmed brightness change\n", repeller.address);
           send_led_on_to_repeller(&repeller);  // Trigger the repeller actually using the new brightness
         } else {

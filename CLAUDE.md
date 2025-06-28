@@ -52,17 +52,17 @@ All packets are 11 bytes: `AA XX YY ZZ ...` where:
 - `tx_startup_comp:XX` - Startup complete
 
 #### Dynamic Packets (Address-Aware)
-- `tx_led:XX (brightness)` - Set LED brightness (0-100)
-- `tx_led_startup:XX (brightness)` - Set startup LED brightness
+- `tx_led_brightness:XX (brightness)` - Set LED brightness (0-100)
+- `tx_led_brightness_startup:XX (brightness)` - Set startup LED brightness
 - `tx_color_startup:XX (RRGGBB)` - Set startup RGB color
 - `tx_color (RRGGBB)` - Set RGB color (broadcast?)
 
 #### Response Packets
 - `rx_startup:XX` - Device startup response
-- `rx_led (brightness)` - LED brightness confirmation
-- `rx_led_startup (brightness)` - Startup brightness confirmation
+- `rx_led_brightness (brightness)` - LED brightness confirmation
+- `rx_led_brightness_startup (brightness)` - Startup brightness confirmation
 - `rx_color_startup (RRGGBB)` - Startup color confirmation
-- `rx_running (value)` - Device running status
+- `rx_heartbeat_running (value)` - Device running status
 - `rx_warmup (XXYY)` - Warmup status
 - `rx_warmup_comp (XXYY)` - Warmup complete status
 
@@ -88,8 +88,6 @@ Change `CURRENT_MODE` in `main.cpp`:
 ### Key Functions
 - `sniffer_setup()`, `sniffer_loop()` - Passive packet capture
 - `tx_controller_init()` - Initialize controller mode
-- `full_startup()` - Complete device startup sequence
-- `full_poweron()` - Power-on sequence
 - `send_tx_*()` - Individual packet transmission functions
 - `receive_packet()` - Packet reception with timeout
 - `identifyPacket()` - Address-aware packet identification
@@ -143,7 +141,7 @@ pio device monitor        # Serial monitor
 5. `tx_warmup_3:XX` → `rx_warmup_3`
 6. `tx_heartbeat:XX` messages (status checks)
 7. `tx_color_startup:XX` (initial color setup)
-8. `tx_led_startup:XX` (initial brightness)
+8. `tx_led_brightness_startup:XX` (initial brightness)
 9. `tx_startup_comp:XX` (startup complete)
 
 ### Communication Patterns

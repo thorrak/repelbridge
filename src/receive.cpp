@@ -29,9 +29,9 @@ bool receive_packet(Packet& packet, uint16_t timeout_ms) {
   unsigned long current_time;
   
   // Ensure we're in receive mode
+  digitalWrite(BUS_0_DIR_PIN, LOW);  // TODO - Detect the appropriate bus and only toggle that pin
+  #ifdef BUS_1_DIR_PIN
   digitalWrite(BUS_1_DIR_PIN, LOW);  // TODO - Detect the appropriate bus and only toggle that pin
-  #ifdef BUS_2_DIR_PIN
-  digitalWrite(BUS_2_DIR_PIN, LOW);  // TODO - Detect the appropriate bus and only toggle that pin
   #endif
   
   while (true) {
