@@ -286,23 +286,3 @@ void Packet::print() const {
 }
 
 
-void Packet::transmit() {
-  // Set RS-485 transceiver to transmit mode
-  digitalWrite(BUS_0_DIR_PIN, HIGH);  // TODO - Detect the appropriate bus and only toggle that pin
-  #ifdef BUS_1_DIR_PIN
-  digitalWrite(BUS_1_DIR_PIN, HIGH);  // TODO - Detect the appropriate bus and only toggle that pin
-  #endif
-  delayMicroseconds(10);  // Give DE time to enable
-  
-  // Send the packet
-  Serial1.write(data, sizeof(data));
-  Serial1.flush();  // Wait until transmission complete
-  
-  // Back to receive mode
-  delayMicroseconds(10);  // Give time for transmission to complete
-  digitalWrite(BUS_0_DIR_PIN, LOW);  // TODO - Detect the appropriate bus and only toggle that pin
-#ifdef BUS_1_DIR_PIN
-  digitalWrite(BUS_1_DIR_PIN, LOW);  // TODO - Detect the appropriate bus and only toggle that pin
-#endif
-  delay(100);  // Allow some time before next operation
-}

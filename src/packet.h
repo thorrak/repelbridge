@@ -97,9 +97,6 @@ public:
   // Print packet in standard format with identification
   void print() const;
 
-  // Transmit packet across the line
-  void transmit();
-
   // If we want to override this packet with a transmit value, use the following
   void setAsTxLED(uint8_t address, uint8_t brightness_pct);
   void setAsTxLEDStartup(uint8_t address, uint8_t brightness_pct);

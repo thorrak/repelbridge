@@ -44,11 +44,5 @@ public:
   }
 };
 
-// Global list to track all discovered repellers
-extern std::list<Repeller> repellers;
-
-// Function declarations
-Repeller* get_repeller(uint8_t address);
-Repeller* get_or_create_repeller(uint8_t address);
 
 #endif

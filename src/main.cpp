@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include "sniffer_mode.h"
-#include "tx_controller.h"
+#include "bus.h"
 
 // Mode selection - change this to switch between modes
 #define MODE_SNIFFER 0
@@ -8,6 +8,10 @@
 
 // Set the desired mode here
 #define CURRENT_MODE       MODE_CONTROLLER
+
+// Global bus objects
+Bus bus0(0);
+Bus bus1(1);
 
 void setup() {
   Serial.begin(115200);
@@ -23,15 +27,15 @@ void setup() {
     
     delay(1000);
 
-    // Initialize the transmitter
-    tx_controller_init(0);  // Bus 0, GPIO4 for DE/RE control
+    // Initialize bus 0
+    bus0.init();
     
     Serial.println("Running full startup sequence...");
     delay(1000);  // Give time to see the message
     
-    discover_repellers();
-    retrieve_serial_for_all();
-    warm_up_all();
+    bus0.discover_repellers();
+    bus0.retrieve_serial_for_all();
+    bus0.warm_up_all();
     
     Serial.println("Full startup sequence completed!");
   }
@@ -51,22 +55,22 @@ void loop() {
     if(!ran_once) {
       if (current_time - last_heartbeat > 15000) {
         Serial.println("Sending periodic heartbeat...");
-        heartbeat = heartbeat_poll();  // Poll the heartbeat status of all repellers
+        heartbeat = bus0.heartbeat_poll();  // Poll the heartbeat status of all repellers
         last_heartbeat = current_time;
       }
 
       if(heartbeat) {
         // All repellers are active. Wait for 30 seconds, then shut them down
         delay(10000);
-        change_led_color(0xA0, 0x00, 0x00);  // Set to red color
+        bus0.change_led_color(0xA0, 0x00, 0x00);  // Set to red color
         delay(10000);        // Change the LED color/brightness
-        change_led_brightness(10);  // Set to 50% brightness
+        bus0.change_led_brightness(10);  // Set to 50% brightness
         delay(10000); 
 
 
 
         Serial.println("Shutting down all repellers...");
-        shutdown_all();
+        bus0.shutdown_all();
         ran_once = true;  // Ensure this runs only once
       }
     }
