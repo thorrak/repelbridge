@@ -23,7 +23,7 @@ void Packet::setAsTxLEDStartup(uint8_t address, uint8_t brightness_pct) {
 
 void Packet::setAsTxColor(uint8_t red, uint8_t green, uint8_t blue) {
   // TX Color: AA 8E 06 XX YY ZZ 00 00 00 00 00 (XX=R, YY=G, ZZ=B)
-  setAsTxColorStartup(0x83, red, green, blue);
+    setAsTxColorStartup(0x8e, red, green, blue);
 }
 
 void Packet::setAsTxColorStartup(uint8_t address, uint8_t red, uint8_t green, uint8_t blue) {
@@ -95,4 +95,11 @@ void Packet::setAsTxPowerup() {
 void Packet::setAsTxPowerdown() {
     // TX Discover: AA 82 07 00 00 00 00 00 00 00 00
     memcpy(data, tx_powerdown, sizeof(data));
+}
+
+void Packet::setAsTxColorConfirm(uint8_t green, uint8_t blue) {
+  // TX Color Confirm: AA 8E 03 08 YY ZZ 00 00 00 00 00 (08 + green + blue from TX_COLOR)
+  uint8_t packet_data[11] = {0xAA, 0x8E, 0x03, 0x08, green, blue};
+  fill_zero(packet_data, 6);
+  memcpy(data, packet_data, sizeof(data));
 }

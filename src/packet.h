@@ -5,15 +5,15 @@
 
 enum PacketType {
   UNKNOWN,
-  TX_LED,
-  RX_LED,
-  TX_LED_STARTUP,
-  RX_LED_STARTUP,
-  RX_RUNNING,
+  TX_LED,  // TODO - Change to TX_LED_BRIGHTNESS
+  RX_LED,  // TODO - Change to RX_LED_BRIGHTNESS
+  TX_LED_STARTUP,  // TODO - Change to TX_LED_BRIGHTNESS_STARTUP
+  RX_LED_STARTUP,  // TODO - Change to RX_LED_BRIGHTNESS_STARTUP
+  RX_RUNNING,  // TODO - Change to RX_HEARTBEAT_RUNNING
   RX_WARMUP,
   RX_WARMUP_COMP,
   TX_COLOR,
-  RX_COLOR,
+  TX_COLOR_CONFIRM,
   TX_COLOR_STARTUP,
   RX_COLOR_STARTUP,
   TX_DISCOVER,
@@ -115,6 +115,7 @@ public:
   void setAsTxStartupComp(uint8_t address);
   void setAsTxPowerup();
   void setAsTxPowerdown();
+  void setAsTxColorConfirm(uint8_t green, uint8_t blue);
   
 };
 

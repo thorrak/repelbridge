@@ -64,9 +64,9 @@ PacketType Packet::identifyPacket() const {
     return TX_COLOR;
   }
   
-  // RX Color: AA 8E 03 XX YY ZZ 00 00 00 00 00
-  if(address == 0x8E && data[2] == 0x03 && rest_zero(data, 6)) {
-    return RX_COLOR;
+  // TX Color Confirm: AA 8E 03 08 YY ZZ 00 00 00 00 00 (08 + green + blue from TX_COLOR)
+  if(address == 0x8E && data[2] == 0x03 && data[3] == 0x08 && rest_zero(data, 6)) {
+    return TX_COLOR_CONFIRM;
   }
   
   // TX Color Startup: AA XX 06 YY ZZ WW 00 00 00 00 00 (XX=address, YY=R, ZZ=G, WW=B)
@@ -193,8 +193,8 @@ const char* Packet::packetName() const {
     case TX_COLOR:
       snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_color (%02X%02X%02X)", data[3], data[4], data[5]);
       break;
-    case RX_COLOR:
-      snprintf(packet_name_buffer, sizeof(packet_name_buffer), "rx_color (%02X%02X%02X)", data[3], data[4], data[5]);
+    case TX_COLOR_CONFIRM:
+      snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_color_confirm (%02X%02X)", data[4], data[5]);
       break;
     case TX_COLOR_STARTUP:
       snprintf(packet_name_buffer, sizeof(packet_name_buffer), "tx_color_startup:%02X (%02X%02X%02X)", data[1], data[3], data[4], data[5]);

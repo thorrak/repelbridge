@@ -32,19 +32,12 @@ void setup() {
     discover_repellers();
     retrieve_serial_for_all();
     warm_up_all();
-    // full_poweron();
-    // delay(10000);
-
-    // // Run the full startup sequence
-    // full_startup();
-
-    // delay(20000);
-    // send_tx_powerdown();
     
     Serial.println("Full startup sequence completed!");
   }
 }
 
+bool ran_once = false;
 void loop() {
   if (CURRENT_MODE == MODE_SNIFFER) {
     sniffer_loop();
@@ -54,10 +47,28 @@ void loop() {
     static unsigned long last_heartbeat = 0;
     unsigned long current_time = millis();
     
-    if (current_time - last_heartbeat > 15000) {
-      Serial.println("Sending periodic heartbeat...");
-      heartbeat_poll();  // Poll the heartbeat status of all repellers
-      last_heartbeat = current_time;
+    bool heartbeat = false;
+    if(!ran_once) {
+      if (current_time - last_heartbeat > 15000) {
+        Serial.println("Sending periodic heartbeat...");
+        heartbeat = heartbeat_poll();  // Poll the heartbeat status of all repellers
+        last_heartbeat = current_time;
+      }
+
+      if(heartbeat) {
+        // All repellers are active. Wait for 30 seconds, then shut them down
+        delay(10000);
+        change_led_color(0xA0, 0x00, 0x00);  // Set to red color
+        delay(10000);        // Change the LED color/brightness
+        change_led_brightness(10);  // Set to 50% brightness
+        delay(10000); 
+
+
+
+        Serial.println("Shutting down all repellers...");
+        shutdown_all();
+        ran_once = true;  // Ensure this runs only once
+      }
     }
     
     delay(100);
