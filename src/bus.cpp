@@ -9,7 +9,7 @@ uint8_t active_bus_id = -1;  // Global variable to track the currently active bu
 // Constructor - initialize bus with ID and set pin assignments
 Bus::Bus(uint8_t id) : bus_id(id), bus_state(BUS_OFFLINE), 
                        warm_on_at(0), active_seconds_last_save_at(0),
-                       hue(125), brightness(100), cartridge_active_seconds(0),
+                       red(0x03), green(0xd5), blue(0xff), brightness(100), cartridge_active_seconds(0),
                        cartridge_warn_at_seconds(349200), auto_shut_off_after_seconds(18000) {
   // Set pin assignments based on bus ID
   if (bus_id == 0) {
@@ -802,9 +802,16 @@ void Bus::load_settings() {
   }
   
   // Read settings in order
-  if (file.available() >= sizeof(uint16_t)) {
-    file.read((uint8_t*)&hue, sizeof(uint16_t));
-    if (hue > 254) hue = 125; // Validate range
+  if (file.available() >= sizeof(uint8_t)) {
+    file.read((uint8_t*)&red, sizeof(uint8_t));
+  }
+  
+  if (file.available() >= sizeof(uint8_t)) {
+    file.read((uint8_t*)&green, sizeof(uint8_t));
+  }
+  
+  if (file.available() >= sizeof(uint8_t)) {
+    file.read((uint8_t*)&blue, sizeof(uint8_t));
   }
   
   if (file.available() >= sizeof(uint8_t)) {
@@ -840,7 +847,9 @@ void Bus::save_settings() {
   }
   
   // Write settings in order
-  file.write((uint8_t*)&hue, sizeof(uint16_t));
+  file.write((uint8_t*)&red, sizeof(uint8_t));
+  file.write((uint8_t*)&green, sizeof(uint8_t));
+  file.write((uint8_t*)&blue, sizeof(uint8_t));
   file.write((uint8_t*)&brightness, sizeof(uint8_t));
   file.write((uint8_t*)&cartridge_active_seconds, sizeof(uint32_t));
   file.write((uint8_t*)&cartridge_warn_at_seconds, sizeof(uint32_t));
@@ -851,14 +860,12 @@ void Bus::save_settings() {
 }
 
 // Zigbee interface methods
-void Bus::ZigbeeSetHue(uint16_t new_hue) {
-  if (new_hue > 254) {
-    Serial.printf("Bus %d: Invalid hue value %d, must be 0-254\n", bus_id, new_hue);
-    return;
-  }
-  hue = new_hue;
+void Bus::ZigbeeSetRGB(uint8_t zb_red, uint8_t zb_green, uint8_t zb_blue) {
+  red = zb_red;
+  green = zb_green;
+  blue = zb_blue;
   save_settings();
-  Serial.printf("Bus %d: Hue set to %d\n", bus_id, hue);
+  Serial.printf("Bus %d: RGB set to (%d, %d, %d)\n", bus_id, red, green, blue);
 }
 
 void Bus::ZigbeeSetBrightness(uint8_t new_brightness) {
@@ -900,51 +907,15 @@ uint8_t Bus::repeller_brightness() {
 }
 
 uint8_t Bus::repeller_red() {
-  // Convert Zigbee hue (0-254) to 0-360 degrees, then to RGB red component
-  float hue_degrees = (hue * 360.0) / 254.0;
-  float h = hue_degrees / 60.0;
-  float c = 1.0; // Chroma (full saturation)
-  float x = c * (1.0 - abs(fmod(h, 2.0) - 1.0));
-  
-  float r = 0;
-  if (h >= 0 && h < 1) r = c;
-  else if (h >= 1 && h < 2) r = x;
-  else if (h >= 4 && h < 5) r = x;
-  else if (h >= 5 && h < 6) r = c;
-  
-  return (uint8_t)round(r * 255.0);
+  return red;
 }
 
 uint8_t Bus::repeller_green() {
-  // Convert Zigbee hue (0-254) to 0-360 degrees, then to RGB green component
-  float hue_degrees = (hue * 360.0) / 254.0;
-  float h = hue_degrees / 60.0;
-  float c = 1.0; // Chroma (full saturation)
-  float x = c * (1.0 - abs(fmod(h, 2.0) - 1.0));
-  
-  float g = 0;
-  if (h >= 0 && h < 1) g = x;
-  else if (h >= 1 && h < 2) g = c;
-  else if (h >= 2 && h < 3) g = c;
-  else if (h >= 3 && h < 4) g = x;
-  
-  return (uint8_t)round(g * 255.0);
+  return green;
 }
 
 uint8_t Bus::repeller_blue() {
-  // Convert Zigbee hue (0-254) to 0-360 degrees, then to RGB blue component
-  float hue_degrees = (hue * 360.0) / 254.0;
-  float h = hue_degrees / 60.0;
-  float c = 1.0; // Chroma (full saturation)
-  float x = c * (1.0 - abs(fmod(h, 2.0) - 1.0));
-  
-  float b = 0;
-  if (h >= 2 && h < 3) b = x;
-  else if (h >= 3 && h < 4) b = c;
-  else if (h >= 4 && h < 5) b = c;
-  else if (h >= 5 && h < 6) b = x;
-  
-  return (uint8_t)round(b * 255.0);
+  return blue;
 }
 
 void Bus::save_active_seconds() {

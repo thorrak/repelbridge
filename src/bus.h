@@ -32,7 +32,9 @@ private:
   uint64_t active_seconds_last_save_at;  // Timestamp when the bus was last warmed up (for tracking auto-off settings)
   
   // Settings fields (saved to filesystem)
-  uint16_t hue;                        // 0-254, default 125
+  uint8_t red;                         // 0-255, default 0x03
+  uint8_t green;                       // 0-255, default 0xd5
+  uint8_t blue;                        // 0-255, default 0xff
   uint8_t brightness;                  // 0-254, default 100
   uint32_t cartridge_active_seconds;   // default 0
   uint32_t cartridge_warn_at_seconds;  // default 349200
@@ -104,7 +106,7 @@ public:
   // Filesystem settings methods
   void load_settings();
   void save_settings();
-  void ZigbeeSetHue(uint16_t hue);
+  void ZigbeeSetRGB(uint8_t zb_red, uint8_t zb_green, uint8_t zb_blue);
   void ZigbeeSetBrightness(uint8_t brightness);
   void ZigbeeResetCartridge();
   void ZigbeeSetCartridgeWarnAtSeconds(uint32_t seconds);

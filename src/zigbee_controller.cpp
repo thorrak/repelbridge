@@ -160,22 +160,8 @@ void zigbee_light_change_callback(ZigbeeRepellerDevice* device, bool state, uint
   // Set brightness (convert from Zigbee 0-254 to internal 0-254 scale)
   bus->ZigbeeSetBrightness(level);
   
-  // For RGB to hue conversion, we'll use a simplified approach
-  // This could be enhanced with proper RGB-to-HSV conversion later
-  uint16_t hue = 0;
-  
-  if (red >= green && red >= blue) {
-    // Red is dominant, hue around 0 degrees
-    hue = 0;
-  } else if (green >= red && green >= blue) {
-    // Green is dominant, hue around 120 degrees 
-    hue = 120 * 254 / 360;
-  } else {
-    // Blue is dominant, hue around 240 degrees
-    hue = 240 * 254 / 360;
-  }
-  
-  bus->ZigbeeSetHue(hue);
+  // Set RGB color directly
+  bus->ZigbeeSetRGB(red, green, blue);
 }
 
 

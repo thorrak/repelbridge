@@ -1,4 +1,5 @@
 // This is a near clone of ZigbeeColorDimmableLight.h
+// Pending merge of: https://github.com/espressif/arduino-esp32/pull/11528
 
 /* Class of Zigbee On/Off Light endpoint inherited from common EP class */
 

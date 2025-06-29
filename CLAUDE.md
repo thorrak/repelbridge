@@ -88,6 +88,7 @@ All packets are 11 bytes: `AA XX YY ZZ ...` where:
 - `src/packet.h/.cpp` - Packet class for RS-485 packet handling
 - `src/repeller.h/.cpp` - Repeller device management
 - `src/known_packets.h` - Predefined packet definitions
+- `src/zigbee_controller.h/.cpp` - Zigbee device management and smart home integration
 
 ### Bus Architecture
 The firmware now supports dual bus operation with independent management:
@@ -103,18 +104,20 @@ Each bus maintains:
 - Independent state management
 - Separate pin configurations
 - Individual packet transmission/reception
+- Independent RGB color storage (red, green, blue uint8_t values)
 
 ### Mode Selection
 Change `CURRENT_MODE` in `main.cpp`:
 ```cpp
-#define MODE_SNIFFER 0      // Passive monitoring
-#define MODE_CONTROLLER 1   // Active controller emulation
+#define MODE_SNIFFER 0          // Passive monitoring
+#define MODE_CONTROLLER 1       // Active controller emulation
+#define MODE_ZIGBEE_CONTROLLER 2 // Zigbee smart home integration
 ```
 
 ### Key Classes and Functions
 
 #### Bus Class Methods
-- `bus.init()` - Initialize bus hardware
+- `bus.init()` - Initialize bus hardware and load settings from filesystem
 - `bus.activate()` - Power on and activate the bus
 - `bus.powerdown()` - Power down and deactivate the bus
 - `bus.transmit(Packet *packet)` - Transmit packet on specific bus
@@ -125,6 +128,38 @@ Change `CURRENT_MODE` in `main.cpp`:
 - `bus.get_repeller(address)` - Get repeller by address
 - `bus.heartbeat_poll()` - Poll all repellers on this bus
 - `bus.warm_up_all()`, `bus.shutdown_all()` - Bus-wide operations
+
+#### Settings Management (LittleFS)
+Each bus maintains persistent settings saved to `/bus[X]_settings.dat`:
+- `bus.ZigbeeSetRGB(red, green, blue)` - Set RGB color values and save to filesystem
+- `bus.ZigbeeSetBrightness(0-254)` - Set brightness and save to filesystem
+- `bus.ZigbeeResetCartridge()` - Reset cartridge active time to 0
+- `bus.ZigbeeSetCartridgeWarnAtSeconds(seconds)` - Set cartridge warning threshold
+- `bus.ZigbeeSetAutoShutOffAfterSeconds(0-57600)` - Set auto shut-off timer
+- `bus.repeller_brightness()` - Convert Zigbee brightness (0-254) to repeller format (0-100)
+- `bus.repeller_red/green/blue()` - Return stored RGB color components
+- `bus.save_active_seconds()` - Update cartridge usage tracking
+- `bus.past_automatic_shutoff()` - Check if auto shut-off time has elapsed
+
+#### RGB Color Management
+Each bus stores RGB values directly instead of using hue-based color conversion:
+
+```cpp
+// Default RGB values (cyan-blue color)
+uint8_t red = 0x03;    // Low red component
+uint8_t green = 0xd5;  // High green component  
+uint8_t blue = 0xff;   // Maximum blue component
+
+// Simple accessors return stored values
+uint8_t Bus::repeller_red() { return red; }
+uint8_t Bus::repeller_green() { return green; }
+uint8_t Bus::repeller_blue() { return blue; }
+
+// Zigbee interface sets RGB directly
+void Bus::ZigbeeSetRGB(uint8_t zb_red, uint8_t zb_green, uint8_t zb_blue);
+```
+
+Note that the Zigbee standard sends values to/from devices as hue and saturation, both of which are clamped to a value of 254 (not 255). This means that the color #0000FF must instead become #0101FF 
 
 #### Global Functions
 - `sniffer_setup()`, `sniffer_loop()` - Passive packet capture
@@ -210,6 +245,16 @@ Each bus maintains its own state:
 - `BUS_REPELLING` - Bus is powered on, and repellers are warmed up and repelling
 - `BUS_ERROR` - Bus configuration error
 
+### Persistent Settings
+Each bus stores configuration in LittleFS at `/bus[X]_settings.dat`:
+- **Red** (0-255): Red color component for repeller LEDs (default: 0x03)
+- **Green** (0-255): Green color component for repeller LEDs (default: 0xd5)
+- **Blue** (0-255): Blue color component for repeller LEDs (default: 0xff)
+- **Brightness** (0-254): Brightness setting for repeller LEDs (default: 100)
+- **CartridgeActiveSeconds**: Total seconds the cartridge has been active (default: 0)
+- **CartridgeWarnAtSeconds**: Warning threshold for cartridge replacement (default: 349200)
+- **AutoShutOffAfterSeconds** (0-57600): Auto shut-off timer in seconds (default: 18000)
+
 ### Repeller States (Per Bus)
 Each repeller on each bus tracks its own state:
 - `OFFLINE` - Device not responding
@@ -256,3 +301,147 @@ Run sniffer mode and look for `rx_startup:XX` packets to identify device address
 - Use `bus.getState()` and `bus.getStateString()` for bus status
 - Check individual repeller states with `repeller.getStateString()`
 - Verify pin configurations match hardware setup for each bus
+
+## Zigbee Smart Home Integration
+
+### MODE_ZIGBEE_CONTROLLER Overview
+The Zigbee controller mode transforms the ESP32-C6 into a smart home hub that exposes each repeller bus as a separate Zigbee device. Each bus functions as an RGB light with additional cartridge monitoring capabilities.
+
+### Zigbee Device Architecture
+```cpp
+// Each bus gets its own Zigbee endpoint
+ZigbeeRepellerDevice* zigbee_bus0_device; // Endpoint 1 for Bus 0
+ZigbeeRepellerDevice* zigbee_bus1_device; // Endpoint 2 for Bus 1
+```
+
+### Supported Zigbee Clusters
+
+#### Standard Clusters (Per Bus)
+| Feature           | Cluster                  | Zigbee Attribute/Command      | Bus Method Called           |
+|-------------------|--------------------------|-------------------------------|-----------------------------|
+| Power control     | On/Off (`0x0006`)        | `on`, `off`                   | `ZigbeePowerOn()`, `ZigbeePowerOff()` |
+| Brightness        | Level Control (`0x0008`) | `MoveToLevelWithOnOff`        | `ZigbeeSetBrightness(0-254)` |
+| RGB color control | Color Control (`0x0300`) | `setLight(RGB)`               | `ZigbeeSetRGB(red, green, blue)`     |
+
+#### Custom Manufacturer Cluster (`0xFC00`)
+- **Manufacturer Code**: `0x1234`
+- **Attributes**:
+  - `runtime_hours` (`0xF001`): Hours of cartridge usage
+  - `percent_left` (`0xF002`): Estimated life remaining (0-100%)
+- **Commands**:
+  - `reset_cartridge` (`0x01`): Calls `ZigbeeResetCartridge()`
+
+### Zigbee Integration Flow
+
+#### Power Control Integration
+```cpp
+// Zigbee ON command sequence
+bus.ZigbeePowerOn() → {
+  if (BUS_OFFLINE) bus.activate()
+  if (no repellers) discover_repellers(), retrieve_serial_for_all()
+  if (BUS_POWERED) warm_up_all()
+}
+
+// Zigbee OFF command sequence  
+bus.ZigbeePowerOff() → {
+  save_active_seconds()
+  shutdown_all()
+}
+```
+
+#### Settings Synchronization
+- **Brightness Control**: Zigbee 0-254 scale → Bus `repeller_brightness()` 0-100 scale
+- **Color Control**: Zigbee RGB values → Direct storage via `ZigbeeSetRGB()` and retrieval via `repeller_red/green/blue()`
+- **Persistent Storage**: All settings saved to LittleFS via `save_settings()`
+
+### Cartridge Monitoring Features
+
+#### Runtime Tracking
+```cpp
+uint16_t runtime_hours = bus.get_cartridge_runtime_hours();
+// Automatically tracks active seconds when bus is BUS_WARMING_UP or BUS_REPELLING
+```
+
+#### Life Percentage Calculation
+```cpp
+uint8_t percent_left = bus.get_cartridge_percent_left();
+// Based on cartridge_active_seconds vs cartridge_warn_at_seconds
+```
+
+#### Automatic Shutoff
+```cpp
+if (bus.past_automatic_shutoff()) {
+  bus.ZigbeePowerOff(); // Auto-shutoff after configured time
+}
+```
+
+### Configuration and Setup
+
+#### Hardware Requirements
+- **ESP32-C6** with Zigbee radio capability
+- **Dual RS-485 buses** (same hardware as controller mode)
+- **LittleFS filesystem** for persistent settings storage
+
+#### Zigbee Network Configuration
+```cpp
+// Device acts as Zigbee Coordinator
+Zigbee.startCoordinator();
+Zigbee.setRebootOpenNetwork(180); // 3-minute join window
+```
+
+#### Bus Endpoint Mapping
+- **Bus 0** → Zigbee Endpoint 1 → "Liv Repeller Bus 0"
+- **Bus 1** → Zigbee Endpoint 2 → "Liv Repeller Bus 1"
+
+### Smart Home Integration Examples
+
+#### Home Assistant Configuration
+```yaml
+# Each bus appears as a separate light entity
+light.liv_repeller_bus_0:
+  platform: zigbee
+  features:
+    - brightness
+    - color_temp
+    - rgb_color
+
+# Custom cartridge monitoring sensors
+sensor.liv_repeller_bus_0_runtime_hours:
+  platform: zigbee
+  
+sensor.liv_repeller_bus_0_cartridge_remaining:
+  platform: zigbee
+```
+
+#### Automation Examples
+```yaml
+# Auto-shutoff when cartridge low
+automation:
+  - trigger:
+      platform: numeric_state
+      entity_id: sensor.liv_repeller_bus_0_cartridge_remaining
+      below: 10
+    action:
+      service: light.turn_off
+      entity_id: light.liv_repeller_bus_0
+```
+
+### Development and Testing
+
+#### Testing Zigbee Mode
+1. Set `CURRENT_MODE = MODE_ZIGBEE_CONTROLLER` in `main.cpp`
+2. Ensure ESP32-C6 target in platformio.ini: `board = seeed_xiao_esp32c6`
+3. Upload firmware and monitor serial output for Zigbee network formation
+4. Use Zigbee coordinator app to discover and control devices
+5. Verify both buses operate independently through Zigbee commands
+
+#### Debugging Zigbee Integration
+- Monitor serial output for Zigbee callback execution
+- Verify bus state changes when Zigbee commands are received
+- Check LittleFS settings persistence across power cycles
+- Validate cartridge monitoring calculations
+
+### Known Limitations
+- Custom manufacturer cluster support depends on ESP32 Zigbee library capabilities
+- Currently uses shared Serial1 for both buses (hardware limitation)
+- Cartridge monitoring requires manual configuration of warning thresholds
