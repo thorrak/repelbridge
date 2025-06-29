@@ -976,3 +976,77 @@ bool Bus::past_automatic_shutoff() {
   
   return elapsed_seconds >= auto_shut_off_after_seconds;
 }
+
+void Bus::ZigbeePowerOn() {
+  Serial.printf("Bus %d: Zigbee power on command received\n", bus_id);
+  
+  // Activate the bus if it's offline
+  if (bus_state == BUS_OFFLINE) {
+    activate();
+  }
+  
+  // If bus is just powered but no repellers are discovered, discover them
+  if (bus_state == BUS_POWERED && repellers.empty()) {
+    discover_repellers();
+    retrieve_serial_for_all();
+  }
+  
+  // Start warmup sequence if not already warming up or repelling
+  if (bus_state == BUS_POWERED) {
+    warm_up_all();
+  }
+  
+  Serial.printf("Bus %d: Zigbee power on sequence initiated\n", bus_id);
+}
+
+void Bus::ZigbeePowerOff() {
+  Serial.printf("Bus %d: Zigbee power off command received\n", bus_id);
+  
+  // Save any remaining active seconds before shutdown
+  save_active_seconds();
+  
+  // Shutdown all repellers and the bus
+  shutdown_all();
+  
+  Serial.printf("Bus %d: Zigbee power off completed\n", bus_id);
+}
+
+// Cartridge monitoring methods
+uint16_t Bus::get_cartridge_runtime_hours() {
+  // Update active seconds if currently running
+  if (bus_state == BUS_WARMING_UP || bus_state == BUS_REPELLING) {
+    uint64_t current_time = esp_timer_get_time();
+    uint64_t elapsed_microseconds = current_time - active_seconds_last_save_at;
+    uint32_t elapsed_seconds = elapsed_microseconds / 1000000; // Convert to seconds
+    uint32_t total_seconds = cartridge_active_seconds + elapsed_seconds;
+    return total_seconds / 3600; // Convert to hours
+  }
+  
+  return cartridge_active_seconds / 3600; // Convert to hours
+}
+
+uint8_t Bus::get_cartridge_percent_left() {
+  uint32_t total_active_seconds = cartridge_active_seconds;
+  
+  // Add current session time if running
+  if (bus_state == BUS_WARMING_UP || bus_state == BUS_REPELLING) {
+    uint64_t current_time = esp_timer_get_time();
+    uint64_t elapsed_microseconds = current_time - active_seconds_last_save_at;
+    uint32_t elapsed_seconds = elapsed_microseconds / 1000000; // Convert to seconds
+    total_active_seconds += elapsed_seconds;
+  }
+  
+  // Calculate percentage remaining
+  if (cartridge_warn_at_seconds == 0) {
+    return 100; // No limit set, always 100%
+  }
+  
+  if (total_active_seconds >= cartridge_warn_at_seconds) {
+    return 0; // Cartridge expired
+  }
+  
+  uint32_t remaining_seconds = cartridge_warn_at_seconds - total_active_seconds;
+  uint8_t percent_left = (remaining_seconds * 100) / cartridge_warn_at_seconds;
+  
+  return percent_left;
+}

@@ -109,6 +109,13 @@ public:
   void ZigbeeResetCartridge();
   void ZigbeeSetCartridgeWarnAtSeconds(uint32_t seconds);
   void ZigbeeSetAutoShutOffAfterSeconds(uint16_t seconds);
+
+  void ZigbeePowerOn();
+  void ZigbeePowerOff();
+  
+  // Cartridge monitoring methods
+  uint16_t get_cartridge_runtime_hours();
+  uint8_t get_cartridge_percent_left();
   
   // Helper methods for converting settings
   uint8_t repeller_brightness();
