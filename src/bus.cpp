@@ -1,12 +1,16 @@
 #include "bus.h"
 #include "known_packets.h"
+#include <LittleFS.h>
 
 
 uint8_t active_bus_id = -1;  // Global variable to track the currently active bus ID
 
 
 // Constructor - initialize bus with ID and set pin assignments
-Bus::Bus(uint8_t id) : bus_id(id), bus_state(BUS_OFFLINE) {
+Bus::Bus(uint8_t id) : bus_id(id), bus_state(BUS_OFFLINE), 
+                       warm_on_at(0), active_seconds_last_save_at(0),
+                       hue(125), brightness(100), cartridge_active_seconds(0),
+                       cartridge_warn_at_seconds(349200), auto_shut_off_after_seconds(18000) {
   // Set pin assignments based on bus ID
   if (bus_id == 0) {
     tx_pin = BUS_0_TX_PIN;
@@ -51,7 +55,10 @@ void Bus::init() {
   if(pow_pin != -1) {
     pinMode(pow_pin, OUTPUT);
     digitalWrite(pow_pin, LOW);  // Start the bus off powered off
-  }  
+  }
+  
+  // Load settings from filesystem
+  load_settings();  
 }
 
 // Activate the bus (Power on the bus (if unpowered) and set as Serial1)
@@ -472,8 +479,8 @@ void Bus::send_startup_led_params(Repeller* repeller) {
   // There are three parts to this:
   // 1. Send tx_color_startup with red, green, blue values and then look for rx_color_startup
   Serial.printf("Bus %d: Setting startup color for repeller 0x%02X...\n", bus_id, repeller->address);
-  // TODO - Come back later when we productionize this, and actually cache the controller color somewhere
-  send_tx_color_startup(repeller->address, 0x42, 0x90, 0xf5); // Soft blue color
+  // Use the configured color from settings
+  send_tx_color_startup(repeller->address, repeller_red(), repeller_green(), repeller_blue());
   
   Packet response_packet;
   if (receive_packet(response_packet, 1000)) {
@@ -491,8 +498,8 @@ void Bus::send_startup_led_params(Repeller* repeller) {
   
   // 2. Send tx_led_brightness_startup with brightness value and then look for rx_led_brightness_startup
   Serial.printf("Bus %d: Setting startup brightness for repeller 0x%02X...\n", bus_id, repeller->address);
-  // TODO - Come back later when we productionize this, and actually cache the controller brightness somewhere
-  send_tx_led_brightness_startup(repeller->address, 100); // Full brightness (100 = 0x64 = 100%)
+  // Use the configured brightness from settings
+  send_tx_led_brightness_startup(repeller->address, repeller_brightness());
   
   if (receive_packet(response_packet, 1000)) {
     if (response_packet.identifyPacket() == RX_LED_BRIGHTNESS_STARTUP) {
@@ -595,6 +602,10 @@ void Bus::warm_up_all() {
   Serial.printf("Bus %d: Warming up all repellers...\n", bus_id);
 
   send_tx_powerup();  // This is the command that actually powers up the repellers
+
+  warm_on_at = esp_timer_get_time();  // Record the time when the repellers were turned on
+  active_seconds_last_save_at = warm_on_at;  // Initialize the last save time to the warm on time
+  bus_state = BUS_WARMING_UP;
   
   for (auto& repeller : repellers) {
     repeller.state = WARMING_UP;
@@ -624,6 +635,7 @@ void Bus::end_warm_up_all() {
     send_activate_at_end_of_warmup(&repeller);
   }
 
+  bus_state = BUS_REPELLING;
   Serial.printf("Bus %d: Activated all repellers.\n", bus_id);
 }
 
@@ -772,4 +784,195 @@ void Bus::shutdown_all() {
   powerdown();
   
   Serial.printf("Bus %d: All repellers shut down.\n", bus_id);
+}
+
+// Load settings from filesystem
+void Bus::load_settings() {
+  String filename = "/bus" + String(bus_id) + "_settings.dat";
+  
+  if (!LittleFS.exists(filename)) {
+    Serial.printf("Bus %d: Settings file not found, using defaults\n", bus_id);
+    return; // Use default values set in constructor
+  }
+  
+  File file = LittleFS.open(filename, "r");
+  if (!file) {
+    Serial.printf("Bus %d: Failed to open settings file, using defaults\n", bus_id);
+    return;
+  }
+  
+  // Read settings in order
+  if (file.available() >= sizeof(uint16_t)) {
+    file.read((uint8_t*)&hue, sizeof(uint16_t));
+    if (hue > 254) hue = 125; // Validate range
+  }
+  
+  if (file.available() >= sizeof(uint8_t)) {
+    file.read((uint8_t*)&brightness, sizeof(uint8_t));
+    if (brightness > 254) brightness = 254; // Validate range
+  }
+  
+  if (file.available() >= sizeof(uint32_t)) {
+    file.read((uint8_t*)&cartridge_active_seconds, sizeof(uint32_t));
+  }
+  
+  if (file.available() >= sizeof(uint32_t)) {
+    file.read((uint8_t*)&cartridge_warn_at_seconds, sizeof(uint32_t));
+  }
+  
+  if (file.available() >= sizeof(uint16_t)) {
+    file.read((uint8_t*)&auto_shut_off_after_seconds, sizeof(uint16_t));
+    if (auto_shut_off_after_seconds > 57600) auto_shut_off_after_seconds = 18000; // Validate range
+  }
+  
+  file.close();
+  Serial.printf("Bus %d: Settings loaded from filesystem\n", bus_id);
+}
+
+// Save settings to filesystem
+void Bus::save_settings() {
+  String filename = "/bus" + String(bus_id) + "_settings.dat";
+  
+  File file = LittleFS.open(filename, "w");
+  if (!file) {
+    Serial.printf("Bus %d: Failed to open settings file for writing\n", bus_id);
+    return;
+  }
+  
+  // Write settings in order
+  file.write((uint8_t*)&hue, sizeof(uint16_t));
+  file.write((uint8_t*)&brightness, sizeof(uint8_t));
+  file.write((uint8_t*)&cartridge_active_seconds, sizeof(uint32_t));
+  file.write((uint8_t*)&cartridge_warn_at_seconds, sizeof(uint32_t));
+  file.write((uint8_t*)&auto_shut_off_after_seconds, sizeof(uint16_t));
+  
+  file.close();
+  Serial.printf("Bus %d: Settings saved to filesystem\n", bus_id);
+}
+
+// Zigbee interface methods
+void Bus::ZigbeeSetHue(uint16_t new_hue) {
+  if (new_hue > 254) {
+    Serial.printf("Bus %d: Invalid hue value %d, must be 0-254\n", bus_id, new_hue);
+    return;
+  }
+  hue = new_hue;
+  save_settings();
+  Serial.printf("Bus %d: Hue set to %d\n", bus_id, hue);
+}
+
+void Bus::ZigbeeSetBrightness(uint8_t new_brightness) {
+  if (new_brightness > 254) {
+    Serial.printf("Bus %d: Invalid brightness value %d, must be 0-254\n", bus_id, new_brightness);
+    return;
+  }
+  brightness = new_brightness;
+  save_settings();
+  Serial.printf("Bus %d: Brightness set to %d\n", bus_id, brightness);
+}
+
+void Bus::ZigbeeResetCartridge() {
+  cartridge_active_seconds = 0;
+  save_settings();
+  Serial.printf("Bus %d: Cartridge reset, active seconds set to 0\n", bus_id);
+}
+
+void Bus::ZigbeeSetCartridgeWarnAtSeconds(uint32_t seconds) {
+  cartridge_warn_at_seconds = seconds;
+  save_settings();
+  Serial.printf("Bus %d: Cartridge warn time set to %lu seconds\n", bus_id, seconds);
+}
+
+void Bus::ZigbeeSetAutoShutOffAfterSeconds(uint16_t seconds) {
+  if (seconds > 57600) {
+    Serial.printf("Bus %d: Invalid auto shut-off value %d, must be 0-57600\n", bus_id, seconds);
+    return;
+  }
+  auto_shut_off_after_seconds = seconds;
+  save_settings();
+  Serial.printf("Bus %d: Auto shut-off set to %d seconds\n", bus_id, seconds);
+}
+
+// Helper conversion methods
+uint8_t Bus::repeller_brightness() {
+  // Convert Zigbee brightness (0-254) to repeller brightness (0-100)
+  return (uint8_t)round((brightness * 100.0) / 254.0);
+}
+
+uint8_t Bus::repeller_red() {
+  // Convert Zigbee hue (0-254) to 0-360 degrees, then to RGB red component
+  float hue_degrees = (hue * 360.0) / 254.0;
+  float h = hue_degrees / 60.0;
+  float c = 1.0; // Chroma (full saturation)
+  float x = c * (1.0 - abs(fmod(h, 2.0) - 1.0));
+  
+  float r = 0;
+  if (h >= 0 && h < 1) r = c;
+  else if (h >= 1 && h < 2) r = x;
+  else if (h >= 4 && h < 5) r = x;
+  else if (h >= 5 && h < 6) r = c;
+  
+  return (uint8_t)round(r * 255.0);
+}
+
+uint8_t Bus::repeller_green() {
+  // Convert Zigbee hue (0-254) to 0-360 degrees, then to RGB green component
+  float hue_degrees = (hue * 360.0) / 254.0;
+  float h = hue_degrees / 60.0;
+  float c = 1.0; // Chroma (full saturation)
+  float x = c * (1.0 - abs(fmod(h, 2.0) - 1.0));
+  
+  float g = 0;
+  if (h >= 0 && h < 1) g = x;
+  else if (h >= 1 && h < 2) g = c;
+  else if (h >= 2 && h < 3) g = c;
+  else if (h >= 3 && h < 4) g = x;
+  
+  return (uint8_t)round(g * 255.0);
+}
+
+uint8_t Bus::repeller_blue() {
+  // Convert Zigbee hue (0-254) to 0-360 degrees, then to RGB blue component
+  float hue_degrees = (hue * 360.0) / 254.0;
+  float h = hue_degrees / 60.0;
+  float c = 1.0; // Chroma (full saturation)
+  float x = c * (1.0 - abs(fmod(h, 2.0) - 1.0));
+  
+  float b = 0;
+  if (h >= 2 && h < 3) b = x;
+  else if (h >= 3 && h < 4) b = c;
+  else if (h >= 4 && h < 5) b = c;
+  else if (h >= 5 && h < 6) b = x;
+  
+  return (uint8_t)round(b * 255.0);
+}
+
+void Bus::save_active_seconds() {
+  if (bus_state == BUS_WARMING_UP || bus_state == BUS_REPELLING) {
+    uint64_t current_time = esp_timer_get_time();
+    uint64_t elapsed_microseconds = current_time - active_seconds_last_save_at;
+    uint32_t elapsed_seconds = elapsed_microseconds / 1000000; // Convert to seconds
+    
+    cartridge_active_seconds += elapsed_seconds;
+    active_seconds_last_save_at = current_time;
+    save_settings();
+    
+    Serial.printf("Bus %d: Active seconds updated: %lu total\n", bus_id, cartridge_active_seconds);
+  }
+}
+
+bool Bus::past_automatic_shutoff() {
+  if (auto_shut_off_after_seconds == 0) {
+    return false; // Auto shut-off disabled
+  }
+  
+  if (warm_on_at == 0) {
+    return false; // Not warmed up yet
+  }
+  
+  uint64_t current_time = esp_timer_get_time();
+  uint64_t elapsed_microseconds = current_time - warm_on_at;
+  uint32_t elapsed_seconds = elapsed_microseconds / 1000000; // Convert to seconds
+  
+  return elapsed_seconds >= auto_shut_off_after_seconds;
 }

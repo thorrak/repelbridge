@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <LittleFS.h>
 #include "sniffer_mode.h"
 #include "bus.h"
 
@@ -17,6 +18,13 @@ void setup() {
   Serial.begin(115200);
   delay(5000);
   Serial.println("Initializing...");
+  
+  // Initialize LittleFS filesystem
+  if (!LittleFS.begin()) {
+    Serial.println("Failed to initialize LittleFS");
+  } else {
+    Serial.println("LittleFS initialized successfully");
+  }
   
   if (CURRENT_MODE == MODE_SNIFFER) {
     Serial.println("Starting in SNIFFER mode...");

@@ -28,6 +28,16 @@ private:
   int dir_pin;
   int pow_pin;
 
+  uint64_t warm_on_at;  // Timestamp when the bus was last warmed up (for tracking auto-off settings)
+  uint64_t active_seconds_last_save_at;  // Timestamp when the bus was last warmed up (for tracking auto-off settings)
+  
+  // Settings fields (saved to filesystem)
+  uint16_t hue;                        // 0-254, default 125
+  uint8_t brightness;                  // 0-254, default 100
+  uint32_t cartridge_active_seconds;   // default 0
+  uint32_t cartridge_warn_at_seconds;  // default 349200
+  uint16_t auto_shut_off_after_seconds; // 0-57600, default 18000
+
 public:
   // Constructor - requires bus ID (0 or 1)
   Bus(uint8_t id);
@@ -90,6 +100,23 @@ public:
   void change_led_brightness(uint8_t brightness_pct);
   void change_led_color(uint8_t red, uint8_t green, uint8_t blue);
   void shutdown_all();
+  
+  // Filesystem settings methods
+  void load_settings();
+  void save_settings();
+  void ZigbeeSetHue(uint16_t hue);
+  void ZigbeeSetBrightness(uint8_t brightness);
+  void ZigbeeResetCartridge();
+  void ZigbeeSetCartridgeWarnAtSeconds(uint32_t seconds);
+  void ZigbeeSetAutoShutOffAfterSeconds(uint16_t seconds);
+  
+  // Helper methods for converting settings
+  uint8_t repeller_brightness();
+  uint8_t repeller_red();
+  uint8_t repeller_green();
+  uint8_t repeller_blue();
+  void save_active_seconds();
+  bool past_automatic_shutoff();
   
   // Getters
   uint8_t getBusId() const { return bus_id; }
