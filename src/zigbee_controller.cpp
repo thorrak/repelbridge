@@ -113,8 +113,9 @@ void zigbee_controller_loop() {
     update_zigbee_attributes_from_bus(zigbee_bus1_device);
     
     // Save active seconds for both buses
-    bus0.save_active_seconds();
-    bus1.save_active_seconds();
+    // TODO - Figure out how I want to handle this
+    // bus0.save_active_seconds();
+    // bus1.save_active_seconds();
     
     // Check for automatic shutoff
     if (bus0.past_automatic_shutoff() && bus0.getState() == BUS_REPELLING) {
@@ -225,10 +226,11 @@ ZigbeeRepellerDevice* get_zigbee_device_by_endpoint(uint8_t endpoint) {
 }
 
 void update_zigbee_attributes_from_bus(ZigbeeRepellerDevice* device) {
+  bool changed = false;
+
   if (!device || !device->getBus()) {
     return;
-  }
-  
+  }  
 
   if (!device->getZigbeeLight()) {
     return;
@@ -238,13 +240,27 @@ void update_zigbee_attributes_from_bus(ZigbeeRepellerDevice* device) {
   ZigbeeColorDimmableLight* light = device->getZigbeeLight();
   
   // Update all light attributes using the comprehensive setLight method
-  bool is_on = (bus->getState() == BUS_REPELLING);
+  bool is_on = (bus->getState() != BUS_OFFLINE && bus->getState() != BUS_ERROR);
   uint8_t brightness_254 = bus->repeller_brightness() * 254 / 100; // Convert 0-100 to 0-254
   uint8_t red = bus->repeller_red();
   uint8_t green = bus->repeller_green();
   uint8_t blue = bus->repeller_blue();
   
-  light->setLight(is_on, brightness_254, red, green, blue);
+  if(light->getLightState() != is_on) {
+    changed = true;
+    Serial.printf("Bus %d: Update from bus: Light state changed to %s\n", bus->getBusId(), is_on ? "ON" : "OFF");
+  }
+  if(light->getLightLevel() != brightness_254) {
+    changed = true;
+    Serial.printf("Bus %d: Update from bus: Light brightness changed from %d to %d\n", bus->getBusId(), light->getLightLevel(), brightness_254);
+  }
+  if(light->getLightRed() != red || light->getLightGreen() != green || light->getLightBlue() != blue) {
+    changed = true;
+    Serial.printf("Bus %d: Update from bus: Light color changed from (%d, %d, %d) to (%d, %d, %d)\n", bus->getBusId(), light->getLightRed(), light->getLightGreen(), light->getLightBlue(), red, green, blue);
+  }
+
+  if(changed)
+    light->setLight(is_on, brightness_254, red, green, blue);
 
 }
 

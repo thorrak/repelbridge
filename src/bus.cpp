@@ -861,11 +861,15 @@ void Bus::save_settings() {
 
 // Zigbee interface methods
 void Bus::ZigbeeSetRGB(uint8_t zb_red, uint8_t zb_green, uint8_t zb_blue) {
-  red = zb_red;
-  green = zb_green;
-  blue = zb_blue;
-  save_settings();
-  Serial.printf("Bus %d: RGB set to (%d, %d, %d)\n", bus_id, red, green, blue);
+  if(zb_red != red || zb_green != green || zb_blue != blue) {
+    red = zb_red;
+    green = zb_green;
+    blue = zb_blue;
+    save_settings();
+    Serial.printf("Bus %d: RGB set to (%d, %d, %d)\n", bus_id, red, green, blue);
+  } else {
+    Serial.printf("Bus %d: RGB already set to (%d, %d, %d), no changes made\n", bus_id, red, green, blue);
+  }
 }
 
 void Bus::ZigbeeSetBrightness(uint8_t new_brightness) {
@@ -873,9 +877,13 @@ void Bus::ZigbeeSetBrightness(uint8_t new_brightness) {
     Serial.printf("Bus %d: Invalid brightness value %d, must be 0-254\n", bus_id, new_brightness);
     return;
   }
-  brightness = new_brightness;
-  save_settings();
-  Serial.printf("Bus %d: Brightness set to %d\n", bus_id, brightness);
+  if(brightness != new_brightness) {
+    brightness = new_brightness;
+    save_settings();
+    Serial.printf("Bus %d: Brightness set to %d\n", bus_id, brightness);
+  } else {
+    Serial.printf("Bus %d: Brightness already set to %d, no changes made", bus_id, brightness);
+  }
 }
 
 void Bus::ZigbeeResetCartridge() {
@@ -885,9 +893,13 @@ void Bus::ZigbeeResetCartridge() {
 }
 
 void Bus::ZigbeeSetCartridgeWarnAtSeconds(uint32_t seconds) {
-  cartridge_warn_at_seconds = seconds;
-  save_settings();
-  Serial.printf("Bus %d: Cartridge warn time set to %lu seconds\n", bus_id, seconds);
+  if(cartridge_warn_at_seconds != seconds) {
+    cartridge_warn_at_seconds = seconds;
+    save_settings();
+    Serial.printf("Bus %d: Cartridge warn time set to %lu seconds\n", bus_id, seconds);
+  } else {
+    Serial.printf("Bus %d: Cartridge warn time already set to %lu seconds, no changes made\n", bus_id, cartridge_warn_at_seconds);
+  }
 }
 
 void Bus::ZigbeeSetAutoShutOffAfterSeconds(uint16_t seconds) {
@@ -895,9 +907,14 @@ void Bus::ZigbeeSetAutoShutOffAfterSeconds(uint16_t seconds) {
     Serial.printf("Bus %d: Invalid auto shut-off value %d, must be 0-57600\n", bus_id, seconds);
     return;
   }
-  auto_shut_off_after_seconds = seconds;
-  save_settings();
-  Serial.printf("Bus %d: Auto shut-off set to %d seconds\n", bus_id, seconds);
+
+  if(auto_shut_off_after_seconds != seconds) {
+    auto_shut_off_after_seconds = seconds;
+    save_settings();
+    Serial.printf("Bus %d: Auto shut-off set to %d seconds\n", bus_id, seconds);
+  } else {
+    Serial.printf("Bus %d: Auto shut-off already set to %d seconds, no changes made\n", bus_id, auto_shut_off_after_seconds);
+  }
 }
 
 // Helper conversion methods
