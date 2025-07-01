@@ -15,11 +15,9 @@ ZigbeeRepellerDevice::ZigbeeRepellerDevice(uint8_t ep_id, Bus* bus)
 }
 
 ZigbeeRepellerDevice::~ZigbeeRepellerDevice() {
-
   if (zigbee_light) {
     delete zigbee_light;
   }
-
 }
 
 void ZigbeeRepellerDevice::init() {
@@ -49,10 +47,6 @@ void ZigbeeRepellerDevice::init() {
   uint8_t red = controlled_bus->repeller_red();
   uint8_t green = controlled_bus->repeller_green();
   uint8_t blue = controlled_bus->repeller_blue();
-  
-  // Use the comprehensive setLight method
-  // TODO - Move this to after the Zigbee radio is initialized
-  // zigbee_light->setLight(is_on, brightness_level, red, green, blue);
   
   Serial.printf("Zigbee device initialized for Bus %d on endpoint %d\n", 
                 controlled_bus->getBusId(), endpoint_id);
@@ -98,7 +92,10 @@ void zigbee_controller_setup() {
   // Set device configuration
   Zigbee.setRebootOpenNetwork(180); // Keep network open for 3 minutes after reboot
   
-  Serial.println("Zigbee controller setup completed");
+  Serial.println("Zigbee controller setup completed, initializing bus values");
+  update_zigbee_attributes_from_bus(zigbee_bus0_device);
+  update_zigbee_attributes_from_bus(zigbee_bus1_device);
+  Serial.println("Bus values initialized. Zigbee endpoints ready.");
   Serial.println("Waiting for devices to join network...");
 
 }
