@@ -46,10 +46,7 @@ void sniffer_setup() {
   // Set DE/RE control pin as output and keep in receive mode
   pinMode(BUS_0_DIR_PIN, OUTPUT);
   digitalWrite(BUS_0_DIR_PIN, LOW);  // Always in receive mode for sniffer
-#ifdef BUS_1_DIR_PIN
-  pinMode(BUS_1_DIR_PIN, OUTPUT);
-  digitalWrite(BUS_1_DIR_PIN, LOW);  // Always in receive mode for sniffer
-#endif
+
 
   // Initialize Serial1 for RS-485 communication
   // ESP32-C6 Serial1 configured for custom pins

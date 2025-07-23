@@ -53,6 +53,7 @@ void Bus::init() {
   digitalWrite(dir_pin, LOW);  // Start in receive mode
 
   if(pow_pin != -1) {
+    Serial.printf("Bus %d: output pow pin low\n", bus_id);
     pinMode(pow_pin, OUTPUT);
     digitalWrite(pow_pin, LOW);  // Start the bus off powered off
   }
@@ -102,8 +103,13 @@ void Bus::powerdown() {
   if(bus_state != BUS_OFFLINE) {
     if(pow_pin != -1) {
       digitalWrite(pow_pin, LOW);  // Power on the bus
+      Serial.printf("Bus %d: powerdown: pin set low\n", bus_id);
+    } else {
+      Serial.printf("Bus %d: powerdown: no power pin\n", bus_id);
     }
     bus_state = BUS_OFFLINE;
+  } else {
+    Serial.printf("Bus %d: powerdown: bus already offline\n", bus_id);
   }
 
   if(active_bus_id == bus_id) {
@@ -327,6 +333,12 @@ void Bus::send_tx_startup_comp(uint8_t address) {
   transmit(&packet);
 }
 
+void Bus::send_set_address(uint8_t address) {
+  Packet packet;
+  packet.setAsSetAddress(address);
+  transmit(&packet);
+}
+
 // Repeller management functions
 Repeller* Bus::get_repeller(uint8_t address) {
   for (auto& repeller : repellers) {
@@ -348,6 +360,18 @@ Repeller* Bus::get_or_create_repeller(uint8_t address) {
   repellers.emplace_back(address);
   return &repellers.back();
 }
+
+uint8_t Bus::find_next_address() {
+  uint8_t next_address = 0x01;  // Start looking for available address from 0x01
+  for(next_address = 0x01; next_address <= 0x1F; next_address++) {
+    if (get_repeller(next_address) == nullptr) {
+      // Found an available address
+      return next_address;
+    }
+  }
+  return 0x20; // Technically, this should be an error.
+}
+
 
 // Discover all repellers on the bus by sending broadcast tx_startup commands
 void Bus::discover_repellers() {
@@ -375,6 +399,38 @@ void Bus::discover_repellers() {
         total_discovered++;
         consecutive_no_response = 0;  // Reset counter
         
+      } else if(received_packet.identifyPacket() == RX_STARTUP_00) {
+        // Special case for RX_STARTUP_00, which indicates the bus is not set up yet
+        Serial.printf("Bus %d: Received RX_STARTUP_00, indicating no address set yet\n", bus_id);
+
+
+        // Find an address that isn't already taken
+        uint8_t available_address = find_next_address();
+
+        if(available_address == 0x20) {
+          Serial.printf("Bus %d: No available addresses found for new repeller\n", bus_id);
+          consecutive_no_response++;
+          continue;  // Skip to next iteration
+        }
+
+        // Once we've found an available address, we can set it on the repeller
+        Serial.printf("Bus %d: Setting repeller address to 0x%02X\n", bus_id, available_address);
+        send_set_address(available_address);
+
+        // I THINK there is a response here that I could read, which I THINK is an incomplete packet 
+        if (receive_packet(received_packet, 500)) {
+          Serial.printf("Bus %d: Received set response packet\n", bus_id);
+          received_packet.print();
+        }
+
+        // The repeller should theoretically respond to the next tx_discover - but let's add it to the list now
+        // so we don't try to create a duplicate.
+        // Create a new repeller with the available address
+        Repeller* repeller = get_or_create_repeller(available_address);
+        repeller->state = INACTIVE;
+        
+        total_discovered++;
+        consecutive_no_response = 0;  // Reset counter
       } else {
         // Received packet but not rx_startup, print it for debugging
         received_packet.print();

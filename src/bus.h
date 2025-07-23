@@ -73,10 +73,12 @@ public:
   void send_tx_led_brightness(uint8_t address, uint8_t brightness);
   void send_tx_led_brightness_startup(uint8_t address, uint8_t brightness);
   void send_tx_discover();
+  void send_set_address(uint8_t address);
   
   // Repeller management functions
   Repeller* get_repeller(uint8_t address);
   Repeller* get_or_create_repeller(uint8_t address);
+  uint8_t find_next_address();
   
   // Helper functions for individual repeller operations
   void retrieve_serial(Repeller* repeller);

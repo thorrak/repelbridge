@@ -42,9 +42,12 @@ void setup() {
 
     // Initialize bus 0
     bus0.init();
+    bus0.activate();  // Activate bus 0
     
     Serial.println("Running full startup sequence...");
-    delay(1000);  // Give time to see the message
+    bus0.discover_repellers();
+    Serial.println("Sent set as address...");
+    delay(10000);  // Wait for the command to be processed
     
     bus0.discover_repellers();
     bus0.retrieve_serial_for_all();

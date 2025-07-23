@@ -131,7 +131,13 @@ PacketType Packet::identifyPacket() const {
   if(address == 0x80 && data[2] == 0x07 && 
      data[4] == 0x05 && data[5] == 0x03 && data[6] == 0xF2 && 
      data[7] == 0x00 && data[8] == 0x0A && data[9] == 0x03 && data[10] == 0x89) {
-    return RX_STARTUP;
+    // There is a special case for RX Startup if 0x00 is the address. In this case, the repeller needs to have an
+    // address set before it can respond to any other packets.
+    if(data[3] == 0x00) {
+      return RX_STARTUP_00;
+    } else {
+      return RX_STARTUP;
+    }
   }
   
   // RX Serial Number 1: AA 80 AF XX XX XX XX XX XX XX XX (serial number part 1)
@@ -234,6 +240,9 @@ const char* Packet::packetName() const {
       break;
     case RX_STARTUP:
       snprintf(packet_name_buffer, sizeof(packet_name_buffer), "rx_startup:%02X", data[3]);
+      break;
+    case RX_STARTUP_00:
+      snprintf(packet_name_buffer, sizeof(packet_name_buffer), "rx_startup_00", data[3]);
       break;
     case RX_SER_NO_1: {
       char serial_part[9];
