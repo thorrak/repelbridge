@@ -129,14 +129,14 @@ void Bus::transmit(Packet *packet) {
   
   // Set RS-485 transceiver to transmit mode for this bus
   digitalWrite(dir_pin, HIGH);
-  delayMicroseconds(10);  // Give DE time to enable
+  delayMicroseconds(20);  // Give DE time to enable
   
   // Send the packet
   Serial1.write(packet->data, sizeof(packet->data));
   Serial1.flush();  // Wait until transmission complete
   
   // Back to receive mode
-  delayMicroseconds(10);  // Give time for transmission to complete
+  delayMicroseconds(20);  // Give time for transmission to complete
   digitalWrite(dir_pin, LOW);
   delay(100);  // Allow some time before next operation
 }
@@ -206,6 +206,21 @@ bool Bus::receive_packet(Packet& packet, uint16_t timeout_ms) {
           packet_in_progress = false;
           return true;
         }
+        buffer_index = 0;
+        packet_in_progress = true;
+      }
+      
+      // Check if this byte is 0xAA (sync byte) and we're not at the start of a packet
+      if (byte_received == 0xAA && buffer_index > 0) {
+        // We found a sync byte but we already have data in the buffer
+        // This indicates extra bytes before the real packet
+        Serial.printf("Bus %d: Found 0xAA at position %d, discarding %d bytes: ", bus_id, buffer_index, buffer_index);
+        for (size_t i = 0; i < buffer_index; i++) {
+          Serial.printf("%02X ", rx_buffer[i]);
+        }
+        Serial.println();
+        
+        // Reset buffer and start fresh with this 0xAA byte
         buffer_index = 0;
         packet_in_progress = true;
       }
