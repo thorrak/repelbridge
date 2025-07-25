@@ -7,13 +7,16 @@
 #include "zigbee_controller.h"
 #endif
 
+#include "wifi_controller.h"
+
 // Mode selection - change this to switch between modes
 #define MODE_SNIFFER 0
 #define MODE_CONTROLLER 1
 #define MODE_ZIGBEE_CONTROLLER 2
+#define MODE_WIFI_CONTROLLER 3
 
 // Set the desired mode here
-#define CURRENT_MODE       MODE_ZIGBEE_CONTROLLER
+#define CURRENT_MODE       MODE_WIFI_CONTROLLER
 
 // Global bus objects
 Bus bus0(0);
@@ -45,6 +48,7 @@ void setup() {
     bus0.activate();  // Activate bus 0
     
     Serial.println("Running full startup sequence...");
+    delay(1000);  // Give time to see the message
     bus0.discover_repellers();
     Serial.println("Sent set as address...");
     delay(10000);  // Wait for the command to be processed
@@ -72,6 +76,16 @@ void setup() {
     zigbee_controller_setup();
     
     Serial.println("Zigbee controller initialization completed!");
+  } else if (CURRENT_MODE == MODE_WIFI_CONTROLLER) {
+    Serial.println("Starting in WIFI_CONTROLLER mode...");
+    Serial.println("Initializing WiFi controller...");
+    
+    delay(1000);
+
+    // Initialize WiFi controller
+    wifi_controller_setup();
+    
+    Serial.println("WiFi controller initialization completed!");
   }
 }
 
@@ -114,6 +128,9 @@ void loop() {
 #if defined(CONFIG_IDF_TARGET_ESP32C6)
     zigbee_controller_loop();
 #endif
+    delay(100);
+  } else if (CURRENT_MODE == MODE_WIFI_CONTROLLER) {
+    wifi_controller_loop();
     delay(100);
   }
 }

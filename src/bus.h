@@ -120,6 +120,9 @@ public:
   // Cartridge monitoring methods
   uint16_t get_cartridge_runtime_hours();
   uint8_t get_cartridge_percent_left();
+  uint32_t get_cartridge_active_seconds() const { return cartridge_active_seconds; }
+  uint32_t get_cartridge_warn_at_seconds() const { return cartridge_warn_at_seconds; }
+  uint16_t get_auto_shut_off_after_seconds() const { return auto_shut_off_after_seconds; }
   
   // Helper methods for converting settings
   uint8_t repeller_brightness();
