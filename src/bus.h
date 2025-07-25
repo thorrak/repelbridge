@@ -6,6 +6,8 @@
 #include "packet.h"
 #include "repeller.h"
 
+#define BUS_POLLING_INTERVAL_MS 15000  // Poll every second
+
 // Bus state enumeration
 enum BusState {
   BUS_OFFLINE,
@@ -30,6 +32,8 @@ private:
 
   uint64_t warm_on_at;  // Timestamp when the bus was last warmed up (for tracking auto-off settings)
   uint64_t active_seconds_last_save_at;  // Timestamp when the bus was last warmed up (for tracking auto-off settings)
+
+  uint64_t last_polled;  // Timestamp at which the bus was last polled for repeller status
   
   // Settings fields (saved to filesystem)
   uint8_t red;                         // 0-255, default 0x03
@@ -46,6 +50,8 @@ public:
   
   // Initialize the bus (call this in setup)
   void init();
+
+  void poll();  // Poll the bus for repeller status and update internal state if past the polling interval
 
   void activate();  // Activate the bus (Power on the bus if unpowered and set as Serial1)
   void powerdown();  // Power down the bus (turn off power pin if available)

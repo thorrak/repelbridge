@@ -50,7 +50,7 @@ String WiFiRepellerDevice::getCartridgeStatusJson() {
 String WiFiRepellerDevice::getSystemStatusJson() {
     JsonDocument doc;
     
-    doc["device_name"] = "Liv Repeller WiFi Controller";
+    doc["device_name"] = "RepelBridge WiFi Controller";
     doc["wifi_connected"] = WiFi.isConnected();
     doc["wifi_ssid"] = WiFi.SSID();
     doc["wifi_ip"] = WiFi.localIP().toString();
@@ -124,6 +124,7 @@ void wifi_controller_loop() {
     
     // Update cartridge monitoring for active buses
     if (bus0.getState() == BUS_WARMING_UP || bus0.getState() == BUS_REPELLING) {
+        bus0.poll();  // Poll bus 0 for status updates
         if (bus0.past_automatic_shutoff()) {
             Serial.println("Bus 0 auto-shutoff triggered");
             bus0.ZigbeePowerOff();
@@ -131,6 +132,7 @@ void wifi_controller_loop() {
     }
     
     if (bus1.getState() == BUS_WARMING_UP || bus1.getState() == BUS_REPELLING) {
+        bus1.poll();  // Poll bus 1 for status updates
         if (bus1.past_automatic_shutoff()) {
             Serial.println("Bus 1 auto-shutoff triggered");
             bus1.ZigbeePowerOff();
@@ -343,7 +345,7 @@ void handleSystemStatus() {
     // Return combined system status
     JsonDocument doc;
     
-    doc["device_name"] = "Liv Repeller WiFi Controller";
+    doc["device_name"] = "RepelBridge WiFi Controller";
     doc["wifi_connected"] = WiFi.isConnected();
     doc["wifi_ssid"] = WiFi.SSID();
     doc["wifi_ip"] = WiFi.localIP().toString();

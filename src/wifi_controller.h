@@ -11,8 +11,8 @@
 #include "getGuid.h"
 
 // WiFi Configuration
-#define WIFI_AP_NAME "Liv-Repeller-Setup"
-#define WIFI_AP_PASSWORD "livrepeller123"
+#define WIFI_AP_NAME "RepelBridge-Setup"
+#define WIFI_AP_PASSWORD "repelbridge"
 #define WIFI_MDNS_SERVICE "_repelbridge"
 #define WIFI_WEB_PORT 80
 

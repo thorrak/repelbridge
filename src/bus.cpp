@@ -9,6 +9,7 @@ uint8_t active_bus_id = -1;  // Global variable to track the currently active bu
 // Constructor - initialize bus with ID and set pin assignments
 Bus::Bus(uint8_t id) : bus_id(id), bus_state(BUS_OFFLINE), 
                        warm_on_at(0), active_seconds_last_save_at(0),
+                       last_polled(0),
                        red(0x03), green(0xd5), blue(0xff), brightness(100), cartridge_active_seconds(0),
                        cartridge_warn_at_seconds(349200), auto_shut_off_after_seconds(18000) {
   // Set pin assignments based on bus ID
@@ -400,7 +401,7 @@ void Bus::discover_repellers() {
         consecutive_no_response = 0;  // Reset counter
         
       } else if(received_packet.identifyPacket() == RX_STARTUP_00) {
-        // Special case for RX_STARTUP_00, which indicates the bus is not set up yet
+        // Special case for RX_STARTUP_00, which indicates the repeller is not set up yet
         Serial.printf("Bus %d: Received RX_STARTUP_00, indicating no address set yet\n", bus_id);
 
 
@@ -778,6 +779,19 @@ bool Bus::heartbeat_poll() {
   return false; 
 }
 
+void Bus::poll() {
+  bool heartbeat = false;  // Track if we successfully polled the heartbeat
+  unsigned long current_time = millis();
+    
+  if (current_time - last_polled > BUS_POLLING_INTERVAL_MS) {
+    Serial.println("Sending periodic heartbeat...");
+    heartbeat = heartbeat_poll();  // Poll the heartbeat status of all repellers on the bus
+    last_polled = current_time;
+  }
+
+}
+
+
 void Bus::change_led_brightness(uint8_t brightness_pct) {
   // This function broadcasts the LED brightness change to all devices
   Serial.printf("Bus %d: Changing LED brightness to %d%% for all devices...\n", bus_id, brightness_pct);
@@ -1029,14 +1043,10 @@ void Bus::ZigbeePowerOn() {
     activate();
   }
   
-  // If bus is just powered but no repellers are discovered, discover them
-  if (bus_state == BUS_POWERED && repellers.empty()) {
+  // If bus is just powered, then discover repellers, retrieve serial numbers, and warm up
+  if (bus_state == BUS_POWERED) {
     discover_repellers();
     retrieve_serial_for_all();
-  }
-  
-  // Start warmup sequence if not already warming up or repelling
-  if (bus_state == BUS_POWERED) {
     warm_up_all();
   }
   

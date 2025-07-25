@@ -38,7 +38,7 @@ static void processPacket() {
 void sniffer_setup() {
   Serial.begin(115200);
   Serial.println("RS-485 Sniffer Starting...");
-  Serial.println("Monitoring communications between controller and Liv Repeller...");
+  Serial.println("Monitoring communications between controller and Repeller...");
   Serial.println("Format: [TIMESTAMP] DIR: HEX_DATA (PACKET_NAME)");
   Serial.println("DIR: RX=Received, TX=Transmitted");
   Serial.println("----------------------------------------");
