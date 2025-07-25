@@ -89,11 +89,17 @@ void wifi_controller_setup() {
     Serial.print("IP Address: ");
     Serial.println(WiFi.localIP());
     
-    // Setup mDNS
-    if (!MDNS.begin("liv-repeller")) {
+    // Setup mDNS with GUID-based identifier
+    char guid[17];
+    getGuid(guid);
+    
+    char mdns_name[25];
+    sprintf(mdns_name, "repel-%s", guid);
+    
+    if (!MDNS.begin(mdns_name)) {
         Serial.println("Error setting up mDNS responder!");
     } else {
-        Serial.println("mDNS responder started");
+        Serial.printf("mDNS responder started as %s.local\n", mdns_name);
         MDNS.addService(WIFI_MDNS_SERVICE, "tcp", WIFI_WEB_PORT);
     }
     

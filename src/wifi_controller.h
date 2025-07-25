@@ -8,6 +8,7 @@
 #include <ESPmDNS.h>
 #include <ArduinoJson.h>
 #include "bus.h"
+#include "getGuid.h"
 
 // WiFi Configuration
 #define WIFI_AP_NAME "Liv-Repeller-Setup"
