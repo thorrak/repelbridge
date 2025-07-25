@@ -1,3 +1,4 @@
+#ifdef MODE_ZIGBEE_CONTROLLER
 #include "zigbee_controller.h"
 
 // #ifdef ZIGBEE_MODE_ED 
@@ -261,4 +262,4 @@ void update_zigbee_attributes_from_bus(ZigbeeRepellerDevice* device) {
 
 }
 
-// #endif // ZIGBEE_MODE_ED
+#endif // MODE_ZIGBEE_CONTROLLER
