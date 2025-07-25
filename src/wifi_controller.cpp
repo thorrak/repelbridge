@@ -204,6 +204,7 @@ void handleBusBrightness() {
         int brightness = web_server->arg("value").toInt();
         if (brightness >= 0 && brightness <= 254) {
             device->getBus()->ZigbeeSetBrightness(brightness);
+            device->getBus()->change_led_brightness(brightness);  // Update LED brightness
             Serial.printf("Bus %d brightness set to %d via WiFi API\n", bus_id, brightness);
             sendJsonResponse(200, device->getBusStatusJson());
         } else {
@@ -230,6 +231,7 @@ void handleBusColor() {
         
         if (red >= 0 && red <= 255 && green >= 0 && green <= 255 && blue >= 0 && blue <= 255) {
             device->getBus()->ZigbeeSetRGB(red, green, blue);
+            device->getBus()->change_led_color(red, green, blue);  // Update LED color
             Serial.printf("Bus %d color set to RGB(%d,%d,%d) via WiFi API\n", bus_id, red, green, blue);
             sendJsonResponse(200, device->getBusStatusJson());
         } else {
