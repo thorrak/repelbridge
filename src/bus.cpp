@@ -1008,6 +1008,12 @@ uint8_t Bus::repeller_brightness() {
   return (uint8_t)round((brightness * 100.0) / 254.0);
 }
 
+uint8_t Bus::zigbee_brightness() {
+  // Convert Zigbee brightness (0-254) to repeller brightness (0-100)
+  return brightness;
+}
+
+
 uint8_t Bus::repeller_red() {
   return red;
 }

@@ -21,7 +21,7 @@ String WiFiRepellerDevice::getBusStatusJson() {
     doc["bus_id"] = bus_id;
     doc["state"] = controlled_bus->getStateString();
     doc["powered"] = (controlled_bus->getState() != BUS_OFFLINE);
-    doc["brightness"] = controlled_bus->repeller_brightness();
+    doc["brightness"] = controlled_bus->zigbee_brightness() + 1; // Convert 0-254 to 1-255 for HTTP API
     doc["color"]["red"] = controlled_bus->repeller_red();
     doc["color"]["green"] = controlled_bus->repeller_green();
     doc["color"]["blue"] = controlled_bus->repeller_blue();
@@ -202,13 +202,15 @@ void handleBusBrightness() {
     
     if (web_server->hasArg("value")) {
         int brightness = web_server->arg("value").toInt();
-        if (brightness >= 0 && brightness <= 254) {
-            device->getBus()->ZigbeeSetBrightness(brightness);
-            device->getBus()->change_led_brightness(brightness);  // Update LED brightness
+        if (brightness >= 1 && brightness <= 255) {
+            // Convert HTTP API brightness (1-255) to internal brightness (0-254)
+            uint8_t zigbee_brightness = brightness - 1;
+            device->getBus()->ZigbeeSetBrightness(zigbee_brightness);
+            device->getBus()->change_led_brightness(device->getBus()->repeller_brightness());  // Update LED brightness
             Serial.printf("Bus %d brightness set to %d via WiFi API\n", bus_id, brightness);
             sendJsonResponse(200, device->getBusStatusJson());
         } else {
-            sendErrorResponse(400, "Brightness must be 0-254");
+            sendErrorResponse(400, "Brightness must be 1-255");
         }
     } else {
         sendErrorResponse(400, "Missing value parameter");
@@ -347,7 +349,12 @@ void handleSystemStatus() {
     // Return combined system status
     JsonDocument doc;
     
+    // Get GUID for system identification
+    char guid[17];
+    getGuid(guid);
+    
     doc["device_name"] = "RepelBridge WiFi Controller";
+    doc["guid"] = guid;
     doc["wifi_connected"] = WiFi.isConnected();
     doc["wifi_ssid"] = WiFi.SSID();
     doc["wifi_ip"] = WiFi.localIP().toString();

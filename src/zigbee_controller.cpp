@@ -161,6 +161,8 @@ void zigbee_light_change_callback(ZigbeeRepellerDevice* device, bool state, uint
   
   // Set RGB color directly
   bus->ZigbeeSetRGB(red, green, blue);
+
+  // TODO - Actually make this update the brightness and color on the device, not just saving it (which is what the above does)
 }
 
 

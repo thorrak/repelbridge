@@ -132,6 +132,7 @@ public:
   
   // Helper methods for converting settings
   uint8_t repeller_brightness();
+  uint8_t zigbee_brightness();  // Returns the current Zigbee brightness (0-254)
   uint8_t repeller_red();
   uint8_t repeller_green();
   uint8_t repeller_blue();

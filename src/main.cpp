@@ -123,7 +123,7 @@ void loop() {
         delay(10000);
         bus0.change_led_color(0xA0, 0x00, 0x00);  // Set to red color
         delay(10000);        // Change the LED color/brightness
-        bus0.change_led_brightness(10);  // Set to 50% brightness
+        bus0.change_led_brightness(10);  // Set to 10% brightness
         delay(10000); 
 
 
