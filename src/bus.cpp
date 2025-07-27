@@ -9,6 +9,7 @@ uint8_t active_bus_id = -1;  // Global variable to track the currently active bu
 // Constructor - initialize bus with ID and set pin assignments
 Bus::Bus(uint8_t id) : bus_id(id), bus_state(BUS_OFFLINE), 
                        warm_on_at(0), active_seconds_last_save_at(0),
+                       last_polled(0),
                        red(0x03), green(0xd5), blue(0xff), brightness(100), cartridge_active_seconds(0),
                        cartridge_warn_at_seconds(349200), auto_shut_off_after_seconds(18000) {
   // Set pin assignments based on bus ID
@@ -53,6 +54,7 @@ void Bus::init() {
   digitalWrite(dir_pin, LOW);  // Start in receive mode
 
   if(pow_pin != -1) {
+    Serial.printf("Bus %d: output pow pin low\n", bus_id);
     pinMode(pow_pin, OUTPUT);
     digitalWrite(pow_pin, LOW);  // Start the bus off powered off
   }
@@ -102,8 +104,13 @@ void Bus::powerdown() {
   if(bus_state != BUS_OFFLINE) {
     if(pow_pin != -1) {
       digitalWrite(pow_pin, LOW);  // Power on the bus
+      Serial.printf("Bus %d: powerdown: pin set low\n", bus_id);
+    } else {
+      Serial.printf("Bus %d: powerdown: no power pin\n", bus_id);
     }
     bus_state = BUS_OFFLINE;
+  } else {
+    Serial.printf("Bus %d: powerdown: bus already offline\n", bus_id);
   }
 
   if(active_bus_id == bus_id) {
@@ -122,14 +129,14 @@ void Bus::transmit(Packet *packet) {
   
   // Set RS-485 transceiver to transmit mode for this bus
   digitalWrite(dir_pin, HIGH);
-  delayMicroseconds(10);  // Give DE time to enable
+  delayMicroseconds(20);  // Give DE time to enable
   
   // Send the packet
   Serial1.write(packet->data, sizeof(packet->data));
   Serial1.flush();  // Wait until transmission complete
   
   // Back to receive mode
-  delayMicroseconds(10);  // Give time for transmission to complete
+  delayMicroseconds(20);  // Give time for transmission to complete
   digitalWrite(dir_pin, LOW);
   delay(100);  // Allow some time before next operation
 }
@@ -199,6 +206,21 @@ bool Bus::receive_packet(Packet& packet, uint16_t timeout_ms) {
           packet_in_progress = false;
           return true;
         }
+        buffer_index = 0;
+        packet_in_progress = true;
+      }
+      
+      // Check if this byte is 0xAA (sync byte) and we're not at the start of a packet
+      if (byte_received == 0xAA && buffer_index > 0) {
+        // We found a sync byte but we already have data in the buffer
+        // This indicates extra bytes before the real packet
+        Serial.printf("Bus %d: Found 0xAA at position %d, discarding %d bytes: ", bus_id, buffer_index, buffer_index);
+        for (size_t i = 0; i < buffer_index; i++) {
+          Serial.printf("%02X ", rx_buffer[i]);
+        }
+        Serial.println();
+        
+        // Reset buffer and start fresh with this 0xAA byte
         buffer_index = 0;
         packet_in_progress = true;
       }
@@ -327,6 +349,12 @@ void Bus::send_tx_startup_comp(uint8_t address) {
   transmit(&packet);
 }
 
+void Bus::send_set_address(uint8_t address) {
+  Packet packet;
+  packet.setAsSetAddress(address);
+  transmit(&packet);
+}
+
 // Repeller management functions
 Repeller* Bus::get_repeller(uint8_t address) {
   for (auto& repeller : repellers) {
@@ -348,6 +376,18 @@ Repeller* Bus::get_or_create_repeller(uint8_t address) {
   repellers.emplace_back(address);
   return &repellers.back();
 }
+
+uint8_t Bus::find_next_address() {
+  uint8_t next_address = 0x01;  // Start looking for available address from 0x01
+  for(next_address = 0x01; next_address <= 0x1F; next_address++) {
+    if (get_repeller(next_address) == nullptr) {
+      // Found an available address
+      return next_address;
+    }
+  }
+  return 0x20; // Technically, this should be an error.
+}
+
 
 // Discover all repellers on the bus by sending broadcast tx_startup commands
 void Bus::discover_repellers() {
@@ -375,6 +415,38 @@ void Bus::discover_repellers() {
         total_discovered++;
         consecutive_no_response = 0;  // Reset counter
         
+      } else if(received_packet.identifyPacket() == RX_STARTUP_00) {
+        // Special case for RX_STARTUP_00, which indicates the repeller is not set up yet
+        Serial.printf("Bus %d: Received RX_STARTUP_00, indicating no address set yet\n", bus_id);
+
+
+        // Find an address that isn't already taken
+        uint8_t available_address = find_next_address();
+
+        if(available_address == 0x20) {
+          Serial.printf("Bus %d: No available addresses found for new repeller\n", bus_id);
+          consecutive_no_response++;
+          continue;  // Skip to next iteration
+        }
+
+        // Once we've found an available address, we can set it on the repeller
+        Serial.printf("Bus %d: Setting repeller address to 0x%02X\n", bus_id, available_address);
+        send_set_address(available_address);
+
+        // I THINK there is a response here that I could read, which I THINK is an incomplete packet 
+        if (receive_packet(received_packet, 500)) {
+          Serial.printf("Bus %d: Received set response packet\n", bus_id);
+          received_packet.print();
+        }
+
+        // The repeller should theoretically respond to the next tx_discover - but let's add it to the list now
+        // so we don't try to create a duplicate.
+        // Create a new repeller with the available address
+        Repeller* repeller = get_or_create_repeller(available_address);
+        repeller->state = INACTIVE;
+        
+        total_discovered++;
+        consecutive_no_response = 0;  // Reset counter
       } else {
         // Received packet but not rx_startup, print it for debugging
         received_packet.print();
@@ -722,6 +794,19 @@ bool Bus::heartbeat_poll() {
   return false; 
 }
 
+void Bus::poll() {
+  bool heartbeat = false;  // Track if we successfully polled the heartbeat
+  unsigned long current_time = millis();
+    
+  if (current_time - last_polled > BUS_POLLING_INTERVAL_MS) {
+    Serial.println("Sending periodic heartbeat...");
+    heartbeat = heartbeat_poll();  // Poll the heartbeat status of all repellers on the bus
+    last_polled = current_time;
+  }
+
+}
+
+
 void Bus::change_led_brightness(uint8_t brightness_pct) {
   // This function broadcasts the LED brightness change to all devices
   Serial.printf("Bus %d: Changing LED brightness to %d%% for all devices...\n", bus_id, brightness_pct);
@@ -923,6 +1008,12 @@ uint8_t Bus::repeller_brightness() {
   return (uint8_t)round((brightness * 100.0) / 254.0);
 }
 
+uint8_t Bus::zigbee_brightness() {
+  // Convert Zigbee brightness (0-254) to repeller brightness (0-100)
+  return brightness;
+}
+
+
 uint8_t Bus::repeller_red() {
   return red;
 }
@@ -973,14 +1064,10 @@ void Bus::ZigbeePowerOn() {
     activate();
   }
   
-  // If bus is just powered but no repellers are discovered, discover them
-  if (bus_state == BUS_POWERED && repellers.empty()) {
+  // If bus is just powered, then discover repellers, retrieve serial numbers, and warm up
+  if (bus_state == BUS_POWERED) {
     discover_repellers();
     retrieve_serial_for_all();
-  }
-  
-  // Start warmup sequence if not already warming up or repelling
-  if (bus_state == BUS_POWERED) {
     warm_up_all();
   }
   

@@ -1,7 +1,7 @@
-# Liv Repeller Controller Emulation Project
+# RepelBridge - Thermacell Liv Repeller Controller Emulation Project
 
 ## Project Overview
-This project emulates a controller for a device called the "Liv Repeller" using reverse-engineered RS-485 communication protocols. The goal is to create an ESP32-based controller that can communicate with and control Liv Repeller devices.
+RepelBridge emulates a controller for Thermacell's Liv mosquito repeller using reverse-engineered RS-485 communication protocols. The goal is to create an ESP32-based controller that can communicate with and control Thermacell Liv repeller devices through multiple interfaces including WiFi REST API, Zigbee smart home integration, and direct controller emulation.
 
 ## Hardware Setup
 - **ESP32-C6 Development Board** (targets `esp32-c6-devkitc-1` in platformio.ini)
@@ -84,11 +84,13 @@ All packets are 11 bytes: `AA XX YY ZZ ...` where:
 ### Core Files
 - `src/main.cpp` - Mode switching and main application logic with dual bus support
 - `src/sniffer_mode.h/.cpp` - RS-485 packet sniffing functionality
-- `src/bus.h/.cpp` - Bus class for controller emulation, transmission, and reception (replaces tx_controller and receive)
+- `src/bus.h/.cpp` - Bus class for controller emulation, transmission, and reception
 - `src/packet.h/.cpp` - Packet class for RS-485 packet handling
 - `src/repeller.h/.cpp` - Repeller device management
 - `src/known_packets.h` - Predefined packet definitions
 - `src/zigbee_controller.h/.cpp` - Zigbee device management and smart home integration
+- `src/wifi_controller.h/.cpp` - WiFi web server and REST API for Home Assistant integration
+- `src/getGuid.h/.cpp` - Device identification utilities
 
 ### Bus Architecture
 The firmware now supports dual bus operation with independent management:
@@ -107,12 +109,18 @@ Each bus maintains:
 - Independent RGB color storage (red, green, blue uint8_t values)
 
 ### Mode Selection
-Change `CURRENT_MODE` in `main.cpp`:
+Modes are now controlled via PlatformIO build environments and compile-time flags:
 ```cpp
 #define MODE_SNIFFER 0          // Passive monitoring
 #define MODE_CONTROLLER 1       // Active controller emulation
 #define MODE_ZIGBEE_CONTROLLER 2 // Zigbee smart home integration
+#define MODE_WIFI_CONTROLLER 3   // WiFi REST API with Home Assistant integration
 ```
+
+Build environments:
+- `esp32c6dev-wifi` - WiFi controller mode (recommended for Home Assistant)
+- `esp32c6dev-zigbee` - Zigbee controller mode
+- `esp32dev` - Generic development environment
 
 ### Key Classes and Functions
 
@@ -120,6 +128,7 @@ Change `CURRENT_MODE` in `main.cpp`:
 - `bus.init()` - Initialize bus hardware and load settings from filesystem
 - `bus.activate()` - Power on and activate the bus
 - `bus.powerdown()` - Power down and deactivate the bus
+- `bus.poll()` - Poll bus for repeller status updates (called periodically)
 - `bus.transmit(Packet *packet)` - Transmit packet on specific bus
 - `bus.receive_packet(Packet& packet, timeout)` - Receive packet on specific bus
 - `bus.receive_and_print(expected_type, timeout)` - Receive and print packet for debugging
@@ -128,6 +137,8 @@ Change `CURRENT_MODE` in `main.cpp`:
 - `bus.get_repeller(address)` - Get repeller by address
 - `bus.heartbeat_poll()` - Poll all repellers on this bus
 - `bus.warm_up_all()`, `bus.shutdown_all()` - Bus-wide operations
+- `bus.change_led_brightness(brightness_pct)` - Change LED brightness during operation
+- `bus.change_led_color(red, green, blue)` - Change LED color during operation
 
 #### Settings Management (LittleFS)
 Each bus maintains persistent settings saved to `/bus[X]_settings.dat`:
@@ -203,12 +214,24 @@ Note that the Zigbee standard sends values to/from devices as hue and saturation
 - **Board**: seeed_xiao_esp32c6
 - **Framework**: arduino
 - **Monitor Speed**: 115200
+- **Dependencies**: WiFiManager, ArduinoJson, LittleFS
 
 ### Build Commands
 ```bash
-pio run                    # Build
-pio run -t upload         # Upload
-pio device monitor        # Serial monitor
+# WiFi Controller Mode (recommended)
+pio run -e esp32c6dev-wifi
+pio run -e esp32c6dev-wifi -t upload
+
+# Zigbee Controller Mode
+pio run -e esp32c6dev-zigbee
+pio run -e esp32c6dev-zigbee -t upload
+
+# Generic ESP32 Development
+pio run -e esp32dev
+pio run -e esp32dev -t upload
+
+# Monitor serial output
+pio device monitor
 ```
 
 ### Linting/Type Checking
@@ -445,3 +468,101 @@ automation:
 - Custom manufacturer cluster support depends on ESP32 Zigbee library capabilities
 - Currently uses shared Serial1 for both buses (hardware limitation)
 - Cartridge monitoring requires manual configuration of warning thresholds
+
+## WiFi Smart Home Integration
+
+### MODE_WIFI_CONTROLLER Overview
+The WiFi controller mode creates a web server with REST API endpoints that integrate seamlessly with Home Assistant. The device creates a captive portal for initial WiFi setup and then provides mDNS discovery for automatic integration.
+
+### WiFi Device Architecture
+```cpp
+// Each bus gets its own WiFi device wrapper
+WiFiRepellerDevice* wifi_bus0_device; // Bus 0 control
+WiFiRepellerDevice* wifi_bus1_device; // Bus 1 control
+```
+
+### Supported REST API Endpoints
+
+#### System Information
+- `GET /api/system/status` - Device status, uptime, WiFi connection info
+
+#### Bus Control (replace `{busId}` with 0 or 1)
+- `GET /api/bus/{busId}/status` - Bus state, settings, and repeller count
+- `POST /api/bus/{busId}/power` - Power control (JSON: `{"power": true/false}`)
+- `POST /api/bus/{busId}/brightness` - Brightness control (JSON: `{"brightness": 0-254}`)
+- `POST /api/bus/{busId}/color` - RGB color control (JSON: `{"red": 0-255, "green": 0-255, "blue": 0-255}`)
+
+#### Cartridge Management
+- `GET /api/bus/{busId}/cartridge` - Runtime hours and remaining life percentage
+- `POST /api/bus/{busId}/cartridge/reset` - Reset cartridge runtime tracking
+- `POST /api/bus/{busId}/auto_shutoff` - Set auto-shutoff timer (JSON: `{"seconds": 0-57600}`)
+- `POST /api/bus/{busId}/cartridge_warn_at` - Set warning threshold (JSON: `{"hours": 0-9999}`)
+
+### WiFi Integration Flow
+
+#### Initial Setup
+1. Device boots and creates WiFi AP: `RepelBridge-Setup` (password: `repelbridge`)
+2. User connects and configures WiFi via captive portal
+3. Device connects to network and starts mDNS service `_repelbridge._tcp.local.`
+4. Home Assistant discovers device automatically or user adds manually by IP
+
+#### Power Control Integration
+```cpp
+// WiFi power control sequence
+POST /api/bus/0/power {"power": true} → {
+  bus.ZigbeePowerOn()
+  if (BUS_OFFLINE) bus.activate()
+  if (no repellers) discover_repellers(), retrieve_serial_for_all()
+  if (BUS_POWERED) warm_up_all()
+}
+
+// WiFi power off sequence
+POST /api/bus/0/power {"power": false} → {
+  bus.save_active_seconds()
+  bus.shutdown_all()
+}
+```
+
+#### Settings Synchronization
+- **Brightness Control**: Home Assistant 0-255 scale → Bus `ZigbeeSetBrightness(0-254)` → Repeller 0-100 scale
+- **Color Control**: Home Assistant RGB values → Direct storage via REST API → `ZigbeeSetRGB()`
+- **Persistent Storage**: All settings automatically saved to LittleFS via `save_settings()`
+
+### Home Assistant Configuration
+
+#### Discovery
+Device appears automatically in Home Assistant integrations as "RepelBridge" when connected to the same network.
+
+#### Manual Configuration
+If automatic discovery fails, manually add integration:
+1. Go to **Settings** → **Devices & Services**
+2. Click **Add Integration** → **RepelBridge**
+3. Enter device IP address (find via router or serial monitor)
+
+#### Entity Types Created
+For each bus (0 and 1):
+- **Light Entity**: `light.repelbridge_bus_X` (RGB color and brightness)
+- **Switch Entity**: `switch.repelbridge_bus_X_power` (on/off control)
+- **Sensor Entities**: Runtime hours, cartridge life %, device count
+- **Number Entities**: Auto-shutoff timer, cartridge warning threshold
+
+### Development and Testing
+
+#### Testing WiFi Mode
+1. Build with `pio run -e esp32c6dev-wifi`
+2. Upload firmware and connect to `RepelBridge-Setup` AP
+3. Configure WiFi via captive portal
+4. Test REST API endpoints: `curl http://device-ip/api/system/status`
+5. Verify Home Assistant discovery and entity creation
+
+#### Debugging WiFi Integration
+- Monitor serial output for WiFi connection status and API requests
+- Verify mDNS advertisement: `dns-sd -B _repelbridge._tcp`
+- Test API endpoints manually before Home Assistant integration
+- Check LittleFS settings persistence across power cycles
+
+### WiFi Mode Limitations
+- Requires stable WiFi connection for Home Assistant integration
+- REST API timeout handling may need adjustment for slow repeller responses
+- Currently uses shared Serial1 for both buses (hardware limitation)
+- Device must be on same network as Home Assistant for automatic discovery

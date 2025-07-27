@@ -1,9 +1,10 @@
 #ifndef ZIGBEE_CONTROLLER_H
 #define ZIGBEE_CONTROLLER_H
 
+#ifdef MODE_ZIGBEE_CONTROLLER
+
 #include <Arduino.h>
 
-// #ifdef ZIGBEE_MODE_ED
 
 
 #include "ZigbeeCore.h"
@@ -14,7 +15,7 @@
 
 // Zigbee Configuration
 #define ZIGBEE_MANUFACTURER_CODE 0x1234
-#define ZIGBEE_DEVICE_NAME "Liv Repeller Controller"
+#define ZIGBEE_DEVICE_NAME "RepelBridge Controller"
 #define ZIGBEE_DEVICE_MODEL "LRC-ESP32C6"
 
 // Custom Manufacturer Cluster
@@ -70,6 +71,6 @@ esp_err_t zigbee_custom_cluster_read_callback(uint8_t endpoint, uint16_t cluster
 ZigbeeRepellerDevice* get_zigbee_device_by_endpoint(uint8_t endpoint);
 void update_zigbee_attributes_from_bus(ZigbeeRepellerDevice* device);
 
-// #endif // ZIGBEE_MODE_ED
+#endif // MODE_ZIGBEE_CONTROLLER
 
 #endif // ZIGBEE_CONTROLLER_H

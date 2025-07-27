@@ -27,6 +27,7 @@ enum PacketType {
   TX_POWERUP,
   TX_POWERDOWN,
   RX_STARTUP,
+  RX_STARTUP_00, // Special case for RX Startup with address 0x00
   RX_SER_NO_1,
   RX_SER_NO_2,
   RX_WARMUP_COMPLETE,  // TODO - Figure out what to rename this to so it's less confusing vs. RX_WARMUP_COMP
@@ -113,6 +114,7 @@ public:
   void setAsTxPowerup();
   void setAsTxPowerdown();
   void setAsTxColorConfirm(uint8_t green, uint8_t blue);
+  void setAsSetAddress(uint8_t address);
   
 };
 

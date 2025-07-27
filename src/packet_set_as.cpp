@@ -103,3 +103,11 @@ void Packet::setAsTxColorConfirm(uint8_t green, uint8_t blue) {
   fill_zero(packet_data, 6);
   memcpy(data, packet_data, sizeof(data));
 }
+
+
+void Packet::setAsSetAddress(uint8_t address) {
+    // TX Set Address: AA 82 08 XX 00 00 00 00 00 00 00 (XX=address)
+    uint8_t packet_data[11] = {0xAA, 0x82, 0x08, address};
+    fill_zero(packet_data, 4);
+    memcpy(data, packet_data, sizeof(data));
+}

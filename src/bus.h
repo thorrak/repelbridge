@@ -6,6 +6,8 @@
 #include "packet.h"
 #include "repeller.h"
 
+#define BUS_POLLING_INTERVAL_MS 15000  // Poll every second
+
 // Bus state enumeration
 enum BusState {
   BUS_OFFLINE,
@@ -30,6 +32,8 @@ private:
 
   uint64_t warm_on_at;  // Timestamp when the bus was last warmed up (for tracking auto-off settings)
   uint64_t active_seconds_last_save_at;  // Timestamp when the bus was last warmed up (for tracking auto-off settings)
+
+  uint64_t last_polled;  // Timestamp at which the bus was last polled for repeller status
   
   // Settings fields (saved to filesystem)
   uint8_t red;                         // 0-255, default 0x03
@@ -46,6 +50,8 @@ public:
   
   // Initialize the bus (call this in setup)
   void init();
+
+  void poll();  // Poll the bus for repeller status and update internal state if past the polling interval
 
   void activate();  // Activate the bus (Power on the bus if unpowered and set as Serial1)
   void powerdown();  // Power down the bus (turn off power pin if available)
@@ -73,10 +79,12 @@ public:
   void send_tx_led_brightness(uint8_t address, uint8_t brightness);
   void send_tx_led_brightness_startup(uint8_t address, uint8_t brightness);
   void send_tx_discover();
+  void send_set_address(uint8_t address);
   
   // Repeller management functions
   Repeller* get_repeller(uint8_t address);
   Repeller* get_or_create_repeller(uint8_t address);
+  uint8_t find_next_address();
   
   // Helper functions for individual repeller operations
   void retrieve_serial(Repeller* repeller);
@@ -118,9 +126,13 @@ public:
   // Cartridge monitoring methods
   uint16_t get_cartridge_runtime_hours();
   uint8_t get_cartridge_percent_left();
+  uint32_t get_cartridge_active_seconds() const { return cartridge_active_seconds; }
+  uint32_t get_cartridge_warn_at_seconds() const { return cartridge_warn_at_seconds; }
+  uint16_t get_auto_shut_off_after_seconds() const { return auto_shut_off_after_seconds; }
   
   // Helper methods for converting settings
   uint8_t repeller_brightness();
+  uint8_t zigbee_brightness();  // Returns the current Zigbee brightness (0-254)
   uint8_t repeller_red();
   uint8_t repeller_green();
   uint8_t repeller_blue();

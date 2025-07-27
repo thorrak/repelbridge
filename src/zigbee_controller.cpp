@@ -1,3 +1,4 @@
+#ifdef MODE_ZIGBEE_CONTROLLER
 #include "zigbee_controller.h"
 
 // #ifdef ZIGBEE_MODE_ED 
@@ -160,6 +161,8 @@ void zigbee_light_change_callback(ZigbeeRepellerDevice* device, bool state, uint
   
   // Set RGB color directly
   bus->ZigbeeSetRGB(red, green, blue);
+
+  // TODO - Actually make this update the brightness and color on the device, not just saving it (which is what the above does)
 }
 
 
@@ -261,4 +264,4 @@ void update_zigbee_attributes_from_bus(ZigbeeRepellerDevice* device) {
 
 }
 
-// #endif // ZIGBEE_MODE_ED
+#endif // MODE_ZIGBEE_CONTROLLER
