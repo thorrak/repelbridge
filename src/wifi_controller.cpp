@@ -81,7 +81,7 @@ void wifi_controller_setup() {
     // Try to connect to WiFi or start config portal
     if (!wifiManager.autoConnect(WIFI_AP_NAME, WIFI_AP_PASSWORD)) {
         Serial.println("Failed to connect to WiFi, restarting...");
-        delay(3000);
+        delay(1000);
         ESP.restart();
     }
     
