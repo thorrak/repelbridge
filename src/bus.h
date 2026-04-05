@@ -1,7 +1,9 @@
 #ifndef BUS_H
 #define BUS_H
 
-#include <Arduino.h>
+#include <cstdint>
+#include <cstring>
+#include <cmath>
 #include <list>
 #include "packet.h"
 #include "repeller.h"

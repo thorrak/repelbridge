@@ -10,3 +10,5 @@
 .vscode/extensions.json
 .vscode/.gitignore
 .vscode/.history
+
+managed_components/

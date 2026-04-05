@@ -3,14 +3,10 @@
 
 #ifdef MODE_ZIGBEE_CONTROLLER
 
-#include <Arduino.h>
+#include <cstdint>
+#include <cstring>
 
-
-
-#include "ZigbeeCore.h"
-// #include "ep/ZigbeeColorDimmableLight.h"
-#include "ZBCDL.h"  // Include the near clone of ZigbeeColorDimmableLight.h
-
+#include "ZBCDL.h"
 #include "bus.h"
 
 // Zigbee Configuration
@@ -25,8 +21,11 @@
 #define ATTR_ID_RUNTIME_HOURS 0xF001
 #define ATTR_ID_PERCENT_LEFT 0xF002
 
-// Custom Cluster Commands  
+// Custom Cluster Commands
 #define CMD_ID_RESET_CARTRIDGE 0x01
+
+// Reboot open network time (seconds)
+#define ZIGBEE_REBOOT_OPEN_NETWORK_TIME 180
 
 // External references to global bus objects
 extern Bus bus0;
@@ -36,14 +35,13 @@ extern Bus bus1;
 class ZigbeeRepellerDevice {
 private:
   ZigbeeColorDimmableLight* zigbee_light;
-
   Bus* controlled_bus;
   uint8_t endpoint_id;
-  
+
 public:
   ZigbeeRepellerDevice(uint8_t ep_id, Bus* bus);
   ~ZigbeeRepellerDevice();
-  
+
   void init();
   Bus* getBus() { return controlled_bus; }
   uint8_t getEndpointId() { return endpoint_id; }

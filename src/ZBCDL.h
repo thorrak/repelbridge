@@ -1,16 +1,17 @@
-// This is a near clone of ZigbeeColorDimmableLight.h
+// Standalone ZigbeeColorDimmableLight - no Arduino ZigbeeEP dependency
+// Originally based on Arduino-ESP32 ZigbeeColorDimmableLight
 // Pending merge of: https://github.com/espressif/arduino-esp32/pull/11528
-
-/* Class of Zigbee On/Off Light endpoint inherited from common EP class */
 
 #pragma once
 
-#include "soc/soc_caps.h"
 #include "sdkconfig.h"
 #if CONFIG_ZB_ENABLED
 
-#include "ZigbeeEP.h"
+#include <cstdint>
+#include <cstring>
+#include "esp_zigbee_core.h"
 #include "ha/esp_zigbee_ha_standard.h"
+#include "ColorFormat.h"
 
 #define ZIGBEE_DEFAULT_COLOR_DIMMABLE_LIGHT_CONFIG()                                     \
   {                                                                                      \
@@ -53,46 +54,41 @@
     },                                                                                   \
   }
 
-class ZigbeeColorDimmableLight : public ZigbeeEP {
+class ZigbeeColorDimmableLight {
 public:
   ZigbeeColorDimmableLight(uint8_t endpoint);
   ~ZigbeeColorDimmableLight() {}
 
+  // Endpoint config accessors (used by zigbee_controller for registration)
+  uint8_t getEndpoint() const { return _endpoint; }
+  esp_zb_endpoint_config_t getEpConfig() const { return _ep_config; }
+  esp_zb_cluster_list_t* getClusterList() const { return _cluster_list; }
+
+  // Configuration
+  bool setManufacturerAndModel(const char *name, const char *model);
+
   void onLightChange(void (*callback)(bool, uint8_t, uint8_t, uint8_t, uint8_t)) {
     _on_light_change = callback;
   }
-  void restoreLight() {
-    lightChanged();
-  }
+
+  // Called by the action handler when an attribute changes on this endpoint
+  void zbAttributeSet(const esp_zb_zcl_set_attr_value_message_t *message);
 
   bool setLightState(bool state);
   bool setLightLevel(uint8_t level);
   bool setLightColor(uint8_t red, uint8_t green, uint8_t blue);
-  bool setLightColor(espRgbColor_t rgb_color);
-  bool setLightColor(espHsvColor_t hsv_color);
   bool setLight(bool state, uint8_t level, uint8_t red, uint8_t green, uint8_t blue);
 
-  bool getLightState() {
-    return _current_state;
-  }
-  uint8_t getLightLevel() {
-    return _current_level;
-  }
-  espRgbColor_t getLightColor() {
-    return _current_color;
-  }
-  uint8_t getLightRed() {
-    return _current_color.r;
-  }
-  uint8_t getLightGreen() {
-    return _current_color.g;
-  }
-  uint8_t getLightBlue() {
-    return _current_color.b;
-  }
+  bool getLightState() { return _current_state; }
+  uint8_t getLightLevel() { return _current_level; }
+  uint8_t getLightRed() { return _current_color.r; }
+  uint8_t getLightGreen() { return _current_color.g; }
+  uint8_t getLightBlue() { return _current_color.b; }
 
 private:
-  void zbAttributeSet(const esp_zb_zcl_set_attr_value_message_t *message) override;
+  uint8_t _endpoint;
+  esp_zb_endpoint_config_t _ep_config;
+  esp_zb_cluster_list_t* _cluster_list;
 
   uint16_t getCurrentColorX();
   uint16_t getCurrentColorY();
@@ -100,7 +96,6 @@ private:
   uint8_t getCurrentColorSaturation();
 
   void lightChanged();
-  //callback function to be called on light change (State, R, G, B, Level)
   void (*_on_light_change)(bool, uint8_t, uint8_t, uint8_t, uint8_t);
 
   bool _current_state;

@@ -1,6 +1,9 @@
 #include "packet.h"
 #include "known_packets.h"
+#include "esp_log.h"
+#include "esp_timer.h"
 
+static const char* TAG = "packet";
 static char packet_name_buffer[32];
 
 bool rest_zero(const uint8_t* data, uint8_t start_index) {
@@ -282,16 +285,16 @@ const char* Packet::packetName() const {
 
 // Print packet in standard format with identification
 void Packet::print() const {
-  Serial.printf("[%08lu] RX: ", millis());
-  
-  // Print hex data
+  uint32_t timestamp = (uint32_t)(esp_timer_get_time() / 1000);
+
+  // Build hex string
+  char hex_buf[34]; // 11 bytes * 3 chars + null
   for(size_t i = 0; i < 11; i++) {
-    Serial.printf("%02X ", data[i]);
+    snprintf(&hex_buf[i * 3], 4, "%02X ", data[i]);
   }
-  
-  // Get packet name with extracted data
+
   const char* packet_name = packetName();
-  Serial.printf("(%s) [11 bytes]\n", packet_name);
+  ESP_LOGI(TAG, "[%08lu] RX: %s(%s) [11 bytes]", timestamp, hex_buf, packet_name);
 }
 
 

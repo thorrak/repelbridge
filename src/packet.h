@@ -1,7 +1,8 @@
 #ifndef PACKET_H
 #define PACKET_H
 
-#include <Arduino.h>
+#include <cstdint>
+#include <cstring>
 
 enum PacketType {
   UNKNOWN,
