@@ -1,18 +1,17 @@
 #ifndef WIFI_CONTROLLER_H
 #define WIFI_CONTROLLER_H
 
-#include <Arduino.h>
-#include <WiFi.h>
-#include <WiFiManager.h>
-#include <WebServer.h>
-#include <ESPmDNS.h>
-#include <ArduinoJson.h>
+#include <cstdint>
+#include <cstring>
+#include <cstdio>
+#include "esp_http_server.h"
+#include "ArduinoJson.h"
 #include "bus.h"
 #include "getGuid.h"
 
 // WiFi Configuration
-#define WIFI_AP_NAME "RepelBridgeAP"
-#define WIFI_AP_PASSWORD "repelbridge"
+#define WIFI_STA_SSID "fakeap"
+#define WIFI_STA_PASS "fakepassword"
 #define WIFI_MDNS_SERVICE "_repelbridge"
 #define WIFI_WEB_PORT 80
 
@@ -29,43 +28,24 @@ class WiFiRepellerDevice {
 private:
     Bus* controlled_bus;
     uint8_t bus_id;
-    
+
 public:
     WiFiRepellerDevice(uint8_t id, Bus* bus);
     ~WiFiRepellerDevice();
-    
+
     Bus* getBus() { return controlled_bus; }
     uint8_t getBusId() { return bus_id; }
-    
-    // REST API response generators
-    String getBusStatusJson();
-    String getCartridgeStatusJson();
-    String getSystemStatusJson();
+
+    // REST API response generators (write JSON into buffer, return bytes written)
+    int writeBusStatusJson(char* buf, size_t buf_size);
+    int writeCartridgeStatusJson(char* buf, size_t buf_size);
 };
 
 // Global WiFi device instances
 extern WiFiRepellerDevice* wifi_bus0_device;
 extern WiFiRepellerDevice* wifi_bus1_device;
 
-// Global web server instance
-extern WebServer* web_server;
-
-// REST API endpoint handlers
-void handleBusStatus();
-void handleBusPower();
-void handleBusBrightness();
-void handleBusColor();
-void handleBusCartridgeStatus();
-void handleBusCartridgeReset();
-void handleBusAutoShutoff();
-void handleBusCartridgeWarnAt();
-void handleSystemStatus();
-void handleNotFound();
-
 // Helper functions
 WiFiRepellerDevice* getDeviceByBusId(uint8_t bus_id);
-void setupWebServerRoutes();
-void sendJsonResponse(int status_code, const String& json);
-void sendErrorResponse(int status_code, const String& error_message);
 
 #endif // WIFI_CONTROLLER_H

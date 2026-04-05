@@ -1,7 +1,9 @@
 #ifndef REPELLER_H
 #define REPELLER_H
 
-#include <Arduino.h>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <list>
 
 // Repeller state enumeration

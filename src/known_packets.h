@@ -1,4 +1,4 @@
-#include <Arduino.h>
+#include <cstdint>
 
 
 // const uint8_t rx_startup[] = {
