@@ -1,32 +1,57 @@
-# RepelBridge
+# RepelBridge - Cloud-free Mosquito Repelling
 
-An ESP32-based controller that emulates communication with Thermacell Liv Repeller devices using reverse-engineered RS-485 protocols. RepelBridge provides multiple control modes including WiFi, Zigbee, and direct controller emulation.
+An ESP32-based controller that manages Thermacell Liv Repeller devices over Zigbee/WiFi without using the cloud. 
+
+**NOTE** - This is an independent, third party project, and is not affiliated with Thermacell in any way. Thermacell and Thermacell LIV are trademarks of Thermacell Repellents, Inc. 
 
 ## Features
 
-### Multi-Mode Operation
-- **Sniffer Mode**: Passive monitoring of RS-485 communications
-- **Controller Mode**: Direct emulation of Liv Repeller controller
-- **WiFi Mode**: Web-based REST API control with Home Assistant integration
-- **Zigbee Mode**: Smart home integration via Zigbee protocol
+### Cloud Free
+- Works entirely locally
+- Integrates with Home Assistant over WiFi 
+- Can alternatively be controlled via Zigbee
 
 ### Dual Bus Support
-- Independent control of two RS-485 buses
-- Simultaneous operation of multiple repeller devices
-- Per-bus configuration and state management
+- Independent control of two sets of up to five repellers
+- Create "zones" of repellers that are controlled independently of one another
 
 ### Device Management
-- Automatic device discovery and addressing
+- Automatic device discovery and addressing (including for brand new devices)
 - RGB LED color control and brightness adjustment
-- Cartridge usage tracking and monitoring
-- Configurable auto-shutoff timers
+- Cartridge usage tracking and monitoring (WiFi only, see "limitations" below)
+- Configurable auto-shutoff timers & cartridge warn timers
+
+### Multi-Mode Operation
+- **WiFi Mode**: Web-based REST API control for Home Assistant integration
+- **Zigbee Mode**: Smart home integration via Zigbee protocol
+- **Sniffer Mode**: Passive monitoring of RS-485 communications (for development)
+
+### 100% Free & Open Source
+- Open source firmware
+- Open source hardware
+- Open source Home Assistant integration
+- All 100% free, and licensed under the (Apache 2.0 license)[LICENSE]
+
+
+## Limitations
+
+The communication protocol was reverse engineered from the official controller, and is not complete. Known to be missing is the built in "end of cartridge life" blinking, but other features not identified 
+
+
 
 ## Hardware
 
 ### Required Components
-- **ESP32-C6 Development Board** (Seeed Xiao ESP32-C6 recommended)
-- **MAX3485 RS-485 Transceivers** on breakout boards (1-2 depending on bus configuration)
-- **Connecting wires** and breadboard/PCB for prototyping
+- **ESP32-S3 or ESP32-C6 Microcontroller** - [ESP32-S3](https://www.seeedstudio.com/XIAO-ESP32S3-p-5627.html) recommended for WiFi builds, [ESP32-C6](https://www.seeedstudio.com/Seeed-Studio-XIAO-ESP32C6-p-5884.html) required for Zigbee builds
+- **Assembled RepelBridge PCB** - Design files available in this repo, including complete Bill of Materials. See [build guide](BUILDING.md) for details.
+- **1x or 2x M12 4-pin A-coded Female Jacks** - [These](https://www.amazon.com/Waterproof-Connector-Bulkhead-Straight-Receptacle/dp/B0BVZDQYH5) or similar
+- **Power Cable** - Standard [AC power cable](https://www.amazon.com/dp/B07C9D6CXY) of the appropriate length
+- **Enclosure** - The one I used is [this one](https://www.amazon.com/dp/B0D97GQRGX), see [build guide](BUILDING.md) for more info
+
+For complete build instructions, see the [build guide](BUILDING.md). 
+
+For my build, material cost excluding shipping/taxes was appx. $97.14 per controller (each of which can manage two banks of repellers)
+
 
 ### Pin Connections
 
@@ -49,6 +74,11 @@ An ESP32-based controller that emulates communication with Thermacell Liv Repell
 - **Format**: 8N1 (8 data bits, no parity, 1 stop bit)
 - **Protocol**: RS-485 differential signaling
 - **Packet Size**: 11 bytes fixed
+
+
+
+
+
 
 ## Building
 
@@ -223,4 +253,4 @@ For issues and feature requests, please use the GitHub repository issue tracker.
 
 ## License
 
-This integration is provided under the MIT License.
+This integration is provided under the Apache 2.0 license. 
