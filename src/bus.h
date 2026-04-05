@@ -41,7 +41,7 @@ private:
   uint8_t red;                         // 0-255, default 0x03
   uint8_t green;                       // 0-255, default 0xd5
   uint8_t blue;                        // 0-255, default 0xff
-  uint8_t brightness;                  // 0-254, default 100
+  uint8_t brightness;                  // 0-255, default 100
   uint32_t cartridge_active_seconds;   // default 0
   uint32_t cartridge_warn_at_seconds;  // default 349200
   uint16_t auto_shut_off_after_seconds; // 0-57600, default 18000
@@ -116,14 +116,14 @@ public:
   // Filesystem settings methods
   void load_settings();
   void save_settings();
-  void ZigbeeSetRGB(uint8_t zb_red, uint8_t zb_green, uint8_t zb_blue);
-  void ZigbeeSetBrightness(uint8_t brightness);
-  void ZigbeeResetCartridge();
-  void ZigbeeSetCartridgeWarnAtSeconds(uint32_t seconds);
-  void ZigbeeSetAutoShutOffAfterSeconds(uint16_t seconds);
+  void setRGB(uint8_t new_red, uint8_t new_green, uint8_t new_blue);
+  void setBrightness(uint8_t brightness);
+  void resetCartridge();
+  void setCartridgeWarnAtSeconds(uint32_t seconds);
+  void setAutoShutOffAfterSeconds(uint16_t seconds);
 
-  void ZigbeePowerOn();
-  void ZigbeePowerOff();
+  void powerOn();
+  void powerOff();
   
   // Cartridge monitoring methods
   uint16_t get_cartridge_runtime_hours();
@@ -134,7 +134,7 @@ public:
   
   // Helper methods for converting settings
   uint8_t repeller_brightness();
-  uint8_t zigbee_brightness();  // Returns the current Zigbee brightness (0-254)
+  uint8_t get_brightness() const { return brightness; }
   uint8_t repeller_red();
   uint8_t repeller_green();
   uint8_t repeller_blue();

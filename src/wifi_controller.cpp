@@ -32,7 +32,7 @@ int WiFiRepellerDevice::writeBusStatusJson(char* buf, size_t buf_size) {
     doc["bus_id"] = bus_id;
     doc["state"] = controlled_bus->getStateString();
     doc["powered"] = (controlled_bus->getState() != BUS_OFFLINE);
-    doc["brightness"] = controlled_bus->zigbee_brightness() + 1; // Convert 0-254 to 1-255 for HTTP API
+    doc["brightness"] = controlled_bus->get_brightness();
     doc["color"]["red"] = controlled_bus->repeller_red();
     doc["color"]["green"] = controlled_bus->repeller_green();
     doc["color"]["blue"] = controlled_bus->repeller_blue();
@@ -130,10 +130,10 @@ static esp_err_t handle_bus_power(httpd_req_t *req) {
 
     bool power_on = doc["state"].as<bool>();
     if (power_on) {
-        device->getBus()->ZigbeePowerOn();
+        device->getBus()->powerOn();
         ESP_LOGI(TAG, "Bus %d powered ON via WiFi API", bus_id);
     } else {
-        device->getBus()->ZigbeePowerOff();
+        device->getBus()->powerOff();
         ESP_LOGI(TAG, "Bus %d powered OFF via WiFi API", bus_id);
     }
 
@@ -159,11 +159,10 @@ static esp_err_t handle_bus_brightness(httpd_req_t *req) {
         return send_error_response(req, 400, "Missing value parameter");
 
     int brightness = doc["value"].as<int>();
-    if (brightness < 1 || brightness > 255)
-        return send_error_response(req, 400, "Brightness must be 1-255");
+    if (brightness < 0 || brightness > 255)
+        return send_error_response(req, 400, "Brightness must be 0-255");
 
-    uint8_t zigbee_brightness = brightness - 1;
-    device->getBus()->ZigbeeSetBrightness(zigbee_brightness);
+    device->getBus()->setBrightness((uint8_t)brightness);
     device->getBus()->change_led_brightness(device->getBus()->repeller_brightness());
     ESP_LOGI(TAG, "Bus %d brightness set to %d via WiFi API", bus_id, brightness);
 
@@ -195,7 +194,7 @@ static esp_err_t handle_bus_color(httpd_req_t *req) {
     if (red < 0 || red > 255 || green < 0 || green > 255 || blue < 0 || blue > 255)
         return send_error_response(req, 400, "RGB values must be 0-255");
 
-    device->getBus()->ZigbeeSetRGB(red, green, blue);
+    device->getBus()->setRGB(red, green, blue);
     device->getBus()->change_led_color(red, green, blue);
     ESP_LOGI(TAG, "Bus %d color set to RGB(%d,%d,%d) via WiFi API", bus_id, red, green, blue);
 
@@ -219,7 +218,7 @@ static esp_err_t handle_bus_cartridge_reset(httpd_req_t *req) {
     WiFiRepellerDevice* device = getDeviceByBusId(bus_id);
     if (!device) return send_error_response(req, 404, "Bus not found");
 
-    device->getBus()->ZigbeeResetCartridge();
+    device->getBus()->resetCartridge();
     ESP_LOGI(TAG, "Bus %d cartridge reset via WiFi API", bus_id);
 
     char buf[256];
@@ -261,7 +260,7 @@ static esp_err_t handle_bus_auto_shutoff_post(httpd_req_t *req) {
         return send_error_response(req, 400, "Auto shutoff must be 0-960 minutes");
 
     int seconds = minutes * 60;
-    device->getBus()->ZigbeeSetAutoShutOffAfterSeconds(seconds);
+    device->getBus()->setAutoShutOffAfterSeconds(seconds);
     ESP_LOGI(TAG, "Bus %d auto shutoff set to %d minutes via WiFi API", bus_id, minutes);
 
     char buf[256];
@@ -303,7 +302,7 @@ static esp_err_t handle_bus_warn_at_post(httpd_req_t *req) {
         return send_error_response(req, 400, "Hours must be >= 0");
 
     uint32_t seconds = hours * 3600;
-    device->getBus()->ZigbeeSetCartridgeWarnAtSeconds(seconds);
+    device->getBus()->setCartridgeWarnAtSeconds(seconds);
     ESP_LOGI(TAG, "Bus %d cartridge warn threshold set to %d hours via WiFi API", bus_id, hours);
 
     char buf[256];
@@ -414,7 +413,7 @@ void wifi_controller_loop() {
         bus0.poll();
         if (bus0.past_automatic_shutoff()) {
             ESP_LOGI(TAG, "Bus 0 auto-shutoff triggered");
-            bus0.ZigbeePowerOff();
+            bus0.powerOff();
         }
     }
 
@@ -422,7 +421,7 @@ void wifi_controller_loop() {
         bus1.poll();
         if (bus1.past_automatic_shutoff()) {
             ESP_LOGI(TAG, "Bus 1 auto-shutoff triggered");
-            bus1.ZigbeePowerOff();
+            bus1.powerOff();
         }
     }
 }

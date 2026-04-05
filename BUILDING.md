@@ -64,11 +64,8 @@ The PCB also adds two screw terminals that could be used in the future to add bu
 The RepelBridge is controlled via a microcontroller which serves as the "brains" of your build. The PCB design is intended to work with one of two options:
 
 - [Xiao ESP32-S3](https://www.seeedstudio.com/Seeed-Studio-XIAO-ESP32S3-Pre-Soldered-p-6334.html)
-- [Xiao ESP32-C6](https://www.seeedstudio.com/Seeed-Studio-XIAO-ESP32C6-Pre-Soldered-p-6328.html)
 
-For most builds, I recommend the ESP32-S3 which connects via WiFi and is intended to be used with Home Assistant. If you prefer a Zigbee build, you can select the ESP32-C6.
-
-The PCB is designed specifically for Seeed Studio's Xiao controllers, and is pin compatible with **both** of the controllers linked above (meaning that you can swap one for another without changing anything else about your build). Seeed offers both pre-soldered and unsoldered versions of their boards - I recommend the pre-soldered version unless you are comfortable with a soldering iron.
+The PCB is designed specifically for Seeed Studio's Xiao controllers. Seeed offers both pre-soldered and unsoldered versions of their boards - I recommend the pre-soldered version unless you are comfortable with a soldering iron.
 
 
 ### Other Components

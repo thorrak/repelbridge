@@ -1,6 +1,6 @@
 # RepelBridge - Cloud-free Mosquito Repelling
 
-An ESP32-based controller that manages Thermacell Liv Repeller devices over Zigbee/WiFi without using the cloud. 
+An ESP32-based controller that manages Thermacell Liv Repeller devices over WiFi without using the cloud. 
 
 **NOTE** - This is an independent, third party project, and is not affiliated with Thermacell in any way. Thermacell and Thermacell LIV are trademarks of Thermacell Repellents, Inc. 
 
@@ -8,8 +8,7 @@ An ESP32-based controller that manages Thermacell Liv Repeller devices over Zigb
 
 ### Cloud Free
 - Works entirely locally
-- Integrates with Home Assistant over WiFi 
-- Can alternatively be controlled via Zigbee
+- Integrates with Home Assistant over WiFi
 
 ### Dual Bus Support
 - Independent control of two sets of up to five repellers
@@ -23,7 +22,6 @@ An ESP32-based controller that manages Thermacell Liv Repeller devices over Zigb
 
 ### Multi-Mode Operation
 - **WiFi Mode**: Web-based REST API control for Home Assistant integration
-- **Zigbee Mode**: Smart home integration via Zigbee protocol
 - **Sniffer Mode**: Passive monitoring of RS-485 communications (for development)
 
 ### 100% Free & Open Source
@@ -42,7 +40,7 @@ The communication protocol was reverse engineered from the official controller, 
 ## Hardware
 
 ### Required Components
-- **ESP32-S3 or ESP32-C6 Microcontroller** - [ESP32-S3](https://www.seeedstudio.com/XIAO-ESP32S3-p-5627.html) recommended for WiFi builds, [ESP32-C6](https://www.seeedstudio.com/Seeed-Studio-XIAO-ESP32C6-p-5884.html) required for Zigbee builds
+- **ESP32-S3 Microcontroller** - [ESP32-S3](https://www.seeedstudio.com/XIAO-ESP32S3-p-5627.html) recommended
 - **Assembled RepelBridge PCB** - Design files available in this repo, including complete Bill of Materials. See [build guide](BUILDING.md) for details.
 - **1x or 2x M12 4-pin A-coded Female Jacks** - [These](https://www.amazon.com/Waterproof-Connector-Bulkhead-Straight-Receptacle/dp/B0BVZDQYH5) or similar
 - **Power Cable** - Standard [AC power cable](https://www.amazon.com/dp/B07C9D6CXY) of the appropriate length
@@ -93,17 +91,7 @@ The project includes multiple PlatformIO environments:
 
 #### WiFi Controller Mode (Recommended)
 ```bash
-pio run -e esp32c6dev-wifi
-```
-
-#### Zigbee Controller Mode
-```bash
-pio run -e esp32c6dev-zigbee
-```
-
-#### Generic ESP32 Development
-```bash
-pio run -e esp32dev
+pio run -e esp32-s3-wifi
 ```
 
 ### Dependencies
@@ -136,7 +124,6 @@ Change build environment or modify `src/main.cpp` to select operational mode:
 - `MODE_SNIFFER` - Passive packet monitoring
 - `MODE_CONTROLLER` - Direct device control
 - `MODE_WIFI_CONTROLLER` - Web API control (default)
-- `MODE_ZIGBEE_CONTROLLER` - Zigbee smart home integration
 
 ## Home Assistant Integration
 
@@ -221,7 +208,7 @@ Direct API access available at `http://device-ip/`:
 **Bus Control** (replace `{0,1}` with bus number)
 - `GET /api/bus/{0,1}/status` - Bus state and current settings
 - `POST /api/bus/{0,1}/power` - Power control (JSON: `{"power": true/false}`)
-- `POST /api/bus/{0,1}/brightness` - Brightness (JSON: `{"brightness": 0-254}`)
+- `POST /api/bus/{0,1}/brightness` - Brightness (JSON: `{"brightness": 0-255}`)
 - `POST /api/bus/{0,1}/color` - RGB color (JSON: `{"red": 0-255, "green": 0-255, "blue": 0-255}`)
 
 **Cartridge Management**

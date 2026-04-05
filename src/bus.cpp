@@ -938,7 +938,6 @@ void Bus::load_settings() {
   fread(&green, sizeof(uint8_t), 1, file);
   fread(&blue, sizeof(uint8_t), 1, file);
   fread(&brightness, sizeof(uint8_t), 1, file);
-  if (brightness > 254) brightness = 254; // Validate range
 
   fread(&cartridge_active_seconds, sizeof(uint32_t), 1, file);
   fread(&cartridge_warn_at_seconds, sizeof(uint32_t), 1, file);
@@ -973,12 +972,12 @@ void Bus::save_settings() {
   ESP_LOGI(TAG, "Bus %d: Settings saved to filesystem", bus_id);
 }
 
-// Zigbee interface methods
-void Bus::ZigbeeSetRGB(uint8_t zb_red, uint8_t zb_green, uint8_t zb_blue) {
-  if(zb_red != red || zb_green != green || zb_blue != blue) {
-    red = zb_red;
-    green = zb_green;
-    blue = zb_blue;
+// Settings interface methods
+void Bus::setRGB(uint8_t new_red, uint8_t new_green, uint8_t new_blue) {
+  if(new_red != red || new_green != green || new_blue != blue) {
+    red = new_red;
+    green = new_green;
+    blue = new_blue;
     save_settings();
     ESP_LOGI(TAG, "Bus %d: RGB set to (%d, %d, %d)", bus_id, red, green, blue);
   } else {
@@ -986,11 +985,7 @@ void Bus::ZigbeeSetRGB(uint8_t zb_red, uint8_t zb_green, uint8_t zb_blue) {
   }
 }
 
-void Bus::ZigbeeSetBrightness(uint8_t new_brightness) {
-  if (new_brightness > 254) {
-    ESP_LOGI(TAG, "Bus %d: Invalid brightness value %d, must be 0-254", bus_id, new_brightness);
-    return;
-  }
+void Bus::setBrightness(uint8_t new_brightness) {
   if(brightness != new_brightness) {
     brightness = new_brightness;
     save_settings();
@@ -1000,13 +995,13 @@ void Bus::ZigbeeSetBrightness(uint8_t new_brightness) {
   }
 }
 
-void Bus::ZigbeeResetCartridge() {
+void Bus::resetCartridge() {
   cartridge_active_seconds = 0;
   save_settings();
   ESP_LOGI(TAG, "Bus %d: Cartridge reset, active seconds set to 0", bus_id);
 }
 
-void Bus::ZigbeeSetCartridgeWarnAtSeconds(uint32_t seconds) {
+void Bus::setCartridgeWarnAtSeconds(uint32_t seconds) {
   if(cartridge_warn_at_seconds != seconds) {
     cartridge_warn_at_seconds = seconds;
     save_settings();
@@ -1016,7 +1011,7 @@ void Bus::ZigbeeSetCartridgeWarnAtSeconds(uint32_t seconds) {
   }
 }
 
-void Bus::ZigbeeSetAutoShutOffAfterSeconds(uint16_t seconds) {
+void Bus::setAutoShutOffAfterSeconds(uint16_t seconds) {
   if (seconds > 57600) {
     ESP_LOGI(TAG, "Bus %d: Invalid auto shut-off value %d, must be 0-57600", bus_id, seconds);
     return;
@@ -1033,15 +1028,9 @@ void Bus::ZigbeeSetAutoShutOffAfterSeconds(uint16_t seconds) {
 
 // Helper conversion methods
 uint8_t Bus::repeller_brightness() {
-  // Convert Zigbee brightness (0-254) to repeller brightness (0-100)
-  return (uint8_t)round((brightness * 100.0) / 254.0);
+  // Convert brightness (0-255) to repeller brightness (0-100)
+  return (uint8_t)round((brightness * 100.0) / 255.0);
 }
-
-uint8_t Bus::zigbee_brightness() {
-  // Convert Zigbee brightness (0-254) to repeller brightness (0-100)
-  return brightness;
-}
-
 
 uint8_t Bus::repeller_red() {
   return red;
@@ -1085,8 +1074,8 @@ bool Bus::past_automatic_shutoff() {
   return elapsed_seconds >= auto_shut_off_after_seconds;
 }
 
-void Bus::ZigbeePowerOn() {
-  ESP_LOGI(TAG, "Bus %d: Zigbee power on command received", bus_id);
+void Bus::powerOn() {
+  ESP_LOGI(TAG, "Bus %d: Power on command received", bus_id);
   
   // Activate the bus if it's offline
   if (bus_state == BUS_OFFLINE) {
@@ -1100,11 +1089,11 @@ void Bus::ZigbeePowerOn() {
     warm_up_all();
   }
   
-  ESP_LOGI(TAG, "Bus %d: Zigbee power on sequence initiated", bus_id);
+  ESP_LOGI(TAG, "Bus %d: Power on sequence initiated", bus_id);
 }
 
-void Bus::ZigbeePowerOff() {
-  ESP_LOGI(TAG, "Bus %d: Zigbee power off command received", bus_id);
+void Bus::powerOff() {
+  ESP_LOGI(TAG, "Bus %d: Power off command received", bus_id);
   
   // Save any remaining active seconds before shutdown
   save_active_seconds();
@@ -1112,7 +1101,7 @@ void Bus::ZigbeePowerOff() {
   // Shutdown all repellers and the bus
   shutdown_all();
   
-  ESP_LOGI(TAG, "Bus %d: Zigbee power off completed", bus_id);
+  ESP_LOGI(TAG, "Bus %d: Power off completed", bus_id);
 }
 
 // Cartridge monitoring methods

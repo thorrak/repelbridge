@@ -9,10 +9,6 @@
 #include "sniffer_mode.h"
 #include "bus.h"
 
-#ifdef MODE_ZIGBEE_CONTROLLER
-#include "zigbee_controller.h"
-#endif
-
 #ifdef MODE_WIFI_CONTROLLER
 #include "wifi_controller.h"
 #endif
@@ -85,25 +81,6 @@ void setup() {
   ESP_LOGI(TAG, "Full startup sequence completed!");
 #endif
 
-#ifdef MODE_ZIGBEE_CONTROLLER
-#if !defined(CONFIG_IDF_TARGET_ESP32C6) && !defined(ZIGBEE_MODE_ED)
-#error "Zigbee mode requires ESP32-C6 target"
-#endif
-  ESP_LOGI(TAG, "Starting in ZIGBEE_CONTROLLER mode...");
-  ESP_LOGI(TAG, "Initializing Zigbee controller...");
-
-  vTaskDelay(pdMS_TO_TICKS(1000));
-
-  // Initialize both buses for Zigbee control
-  bus0.init();
-  bus1.init();
-
-  // Initialize Zigbee controller
-  zigbee_controller_setup();
-
-  ESP_LOGI(TAG, "Zigbee controller initialization completed!");
-#endif
-
 #ifdef MODE_WIFI_CONTROLLER
   ESP_LOGI(TAG, "Starting in WIFI_CONTROLLER mode...");
   ESP_LOGI(TAG, "Initializing WiFi controller...");
@@ -148,11 +125,6 @@ void loop() {
       }
     }
 
-    vTaskDelay(pdMS_TO_TICKS(100));
-#endif
-
-#ifdef MODE_ZIGBEE_CONTROLLER
-    zigbee_controller_loop();
     vTaskDelay(pdMS_TO_TICKS(100));
 #endif
 
