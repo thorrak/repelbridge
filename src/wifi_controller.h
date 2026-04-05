@@ -9,12 +9,6 @@
 #include "bus.h"
 #include "getGuid.h"
 
-// WiFi Configuration
-#define WIFI_STA_SSID "fakeap"
-#define WIFI_STA_PASS "fakepassword"
-#define WIFI_MDNS_SERVICE "_repelbridge"
-#define WIFI_WEB_PORT 80
-
 // External references to global bus objects
 extern Bus bus0;
 extern Bus bus1;
