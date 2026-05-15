@@ -4,26 +4,29 @@
 RepelBridge emulates a controller for Thermacell's Liv mosquito repeller using reverse-engineered RS-485 communication protocols. The goal is to create an ESP32-based controller that can communicate with and control Thermacell Liv repeller devices through multiple interfaces including WiFi REST API and direct controller emulation.
 
 ## Hardware Setup
-- **ESP32-C6 Development Board** (targets `esp32-c6-devkitc-1` in platformio.ini)
+- **Seeed XIAO ESP32-S3** (`board = seeed_xiao_esp32s3` in platformio.ini)
 - **MAX3485 RS-485 Transceivers** on breakout boards (up to 2 for dual bus support)
 - **RS-485 Bus Connections** to monitor/control Liv Repeller devices
 
 ### Pin Connections (Dual Bus Support)
+Pin assignments come from `BUS_X_*_PIN` build flags in platformio.ini — edit there to retarget.
+
 ```
-Bus 0 (MAX3485) → ESP32-C6
+Bus 0 (MAX3485) → XIAO ESP32-S3
 - A/B terminals → RS-485 bus 0 (differential pair)
-- RO (Receive Output) → GPIO17 (Serial1 RX)
-- DI (Driver Input) → GPIO16 (Serial1 TX)
-- DE/RE (tied together) → GPIO23 (Direction control)
+- RO (Receive Output) → GPIO44 (UART RX)
+- DI (Driver Input)   → GPIO43 (UART TX)
+- DE/RE (tied)        → GPIO6  (Direction control)
+- Power enable        → GPIO9
 - VCC → 3.3V or 5V
 - GND → Ground
 
-Bus 1 (MAX3485) → ESP32-C6 (Optional)
+Bus 1 (MAX3485) → XIAO ESP32-S3 (Optional)
 - A/B terminals → RS-485 bus 1 (differential pair)
-- RO (Receive Output) → GPIO22 (Bus 1 RX)
-- DI (Driver Input) → GPIO19 (Bus 1 TX)
-- DE/RE (tied together) → GPIO21 (Direction control)
-- Power Pin → GPIO20 (Bus 1 power control)
+- RO (Receive Output) → GPIO5
+- DI (Driver Input)   → GPIO7
+- DE/RE (tied)        → GPIO4 (Direction control)
+- Power enable        → GPIO8
 - VCC → 3.3V or 5V
 - GND → Ground
 ```
@@ -53,10 +56,11 @@ All packets are 11 bytes: `AA XX YY ZZ ...` where:
 ### Known Message Types
 
 #### Fixed Packets (Address-Aware)
-- `tx_startup:XX` - Device startup sequence
+- `tx_startup:XX` - Device startup / discovery message
 - `tx_heartbeat:XX` - Keep-alive message
-- `tx_led_on_conf:XX` - LED configuration
-- `tx_warmup_1:XX`, `tx_warmup_2:XX`, `tx_warmup_3:XX` - Warmup sequence
+- `tx_led_on_conf:XX` - LED on confirmation
+- `tx_ser_no_1:XX`, `tx_ser_no_2:XX` - Serial number requests
+- `tx_warmup:XX` - Begin warmup
 - `tx_warmup_complete:XX` - Warmup finished
 - `tx_startup_comp:XX` - Startup complete
 
@@ -86,10 +90,12 @@ All packets are 11 bytes: `AA XX YY ZZ ...` where:
 - `src/sniffer_mode.h/.cpp` - RS-485 packet sniffing functionality
 - `src/bus.h/.cpp` - Bus class for controller emulation, transmission, and reception
 - `src/packet.h/.cpp` - Packet class for RS-485 packet handling
-- `src/repeller.h/.cpp` - Repeller device management
+- `src/repeller.h` - Repeller device management
 - `src/known_packets.h` - Predefined packet definitions
 - `src/wifi_controller.h/.cpp` - WiFi web server and REST API for Home Assistant integration
+- `src/wifi_setup.h/.cpp` - WiFi provisioning via `esp_wifi_config` (BLE, Improv, captive portal)
 - `src/getGuid.h/.cpp` - Device identification utilities
+- `src/CMakeLists.txt` / `src/idf_component.yml` - ESP-IDF component manifests
 
 ### Bus Architecture
 The firmware now supports dual bus operation with independent management:
@@ -108,16 +114,13 @@ Each bus maintains:
 - Independent RGB color storage (red, green, blue uint8_t values)
 
 ### Mode Selection
-Modes are now controlled via PlatformIO build environments and compile-time flags:
-```cpp
-#define MODE_SNIFFER 0          // Passive monitoring
-#define MODE_CONTROLLER 1       // Active controller emulation
-#define MODE_WIFI_CONTROLLER 2  // WiFi REST API with Home Assistant integration
-```
+Modes are selected at compile time via `-D` build flags in `platformio.ini`. `main.cpp` conditionally compiles based on which is defined:
+- `MODE_SNIFFER` - Passive packet monitoring
+- `MODE_CONTROLLER` - Active controller emulation (no WiFi)
+- `MODE_WIFI_CONTROLLER` - WiFi REST API with Home Assistant integration
 
 Build environments:
-- `esp32-s3-wifi` - WiFi controller mode (recommended for Home Assistant)
-- `esp32dev` - Generic development environment
+- `esp32-s3-wifi` - The only environment currently shipped; defines `MODE_WIFI_CONTROLLER`. To use sniffer or bare controller mode, swap the build flag in `platformio.ini`.
 
 ### Key Classes and Functions
 
@@ -138,7 +141,7 @@ Build environments:
 - `bus.change_led_color(red, green, blue)` - Change LED color during operation
 
 #### Settings Management (LittleFS)
-Each bus maintains persistent settings saved to `/bus[X]_settings.dat`:
+Each bus maintains persistent settings saved to `/littlefs/bus[X]_settings.dat`:
 - `bus.setRGB(red, green, blue)` - Set RGB color values and save to filesystem
 - `bus.setBrightness(0-255)` - Set brightness and save to filesystem
 - `bus.resetCartridge()` - Reset cartridge active time to 0
@@ -205,24 +208,27 @@ void Bus::setRGB(uint8_t red, uint8_t green, uint8_t blue);
 ## Build and Development
 
 ### PlatformIO Configuration
-- **Platform**: espressif32
-- **Board**: seeed_xiao_esp32c6
-- **Framework**: arduino
+- **Platform**: pioarduino fork of espressif32 (pinned via URL in `platformio.ini`)
+- **Board**: `seeed_xiao_esp32s3`
+- **Framework**: `espidf` (ESP-IDF native, not Arduino)
 - **Monitor Speed**: 115200
-- **Dependencies**: WiFiManager, ArduinoJson, LittleFS
+- **Filesystem**: LittleFS (partition label `spiffs`, mounted at `/littlefs` via VFS in `main.cpp`)
+- **Partition table**: `4mb_inc_ota.csv`
+- **SDK defaults**: `sdkconfig.defaults` + `sdkconfig.wifi.defaults`
+- **Library Dependencies**:
+  - `bblanchon/ArduinoJson` - REST API JSON serialization
+  - `thorrak/esp_wifi_config` - WiFi provisioning (BLE / Improv Serial / captive portal web UI)
 
 ### Build Commands
 ```bash
-# WiFi Controller Mode (recommended)
+# Build
 pio run -e esp32-s3-wifi
+
+# Upload
 pio run -e esp32-s3-wifi -t upload
 
-# Generic ESP32 Development
-pio run -e esp32dev
-pio run -e esp32dev -t upload
-
 # Monitor serial output
-pio device monitor
+pio device monitor -e esp32-s3-wifi
 ```
 
 ### Linting/Type Checking
@@ -260,7 +266,7 @@ Each bus maintains its own state:
 - `BUS_ERROR` - Bus configuration error
 
 ### Persistent Settings
-Each bus stores configuration in LittleFS at `/bus[X]_settings.dat`:
+Each bus stores configuration in LittleFS at `/littlefs/bus[X]_settings.dat`:
 - **Red** (0-255): Red color component for repeller LEDs (default: 0x03)
 - **Green** (0-255): Green color component for repeller LEDs (default: 0xd5)
 - **Blue** (0-255): Blue color component for repeller LEDs (default: 0xff)
@@ -280,16 +286,9 @@ Each repeller on each bus tracks its own state:
 ## Known Issues & Limitations
 
 ### Current Limitations
-- Currently uses Serial1 for both buses (hardware limitation)
-- Some RX packet patterns may need device-specific variations
-- Color commands may be broadcast vs. addressed (needs verification)
-- Bus 1 functionality ready but needs hardware testing
-
-### Future Enhancements
-- True dual Serial port support for independent bus operation
-- Enhanced error handling and retry logic per bus
-- Configuration file for device-specific parameters
-- Bus health monitoring and automatic recovery
+- Both buses share `UART_NUM_1`; the firmware ping-pongs ownership via `active_bus_id` in `bus.cpp` rather than running them concurrently.
+- Some RX packet patterns may need device-specific variations.
+- Color commands are sent as broadcasts (`AA 8E ...`) — addressed variants have not been verified.
 
 ## Debugging Tips
 
@@ -335,28 +334,30 @@ WiFiRepellerDevice* wifi_bus1_device; // Bus 1 control
 
 #### Bus Control (replace `{busId}` with 0 or 1)
 - `GET /api/bus/{busId}/status` - Bus state, settings, and repeller count
-- `POST /api/bus/{busId}/power` - Power control (JSON: `{"power": true/false}`)
-- `POST /api/bus/{busId}/brightness` - Brightness control (JSON: `{"brightness": 0-255}`)
+- `POST /api/bus/{busId}/power` - Power control (JSON: `{"state": true/false}`)
+- `POST /api/bus/{busId}/brightness` - Brightness control (JSON: `{"value": 0-255}`)
 - `POST /api/bus/{busId}/color` - RGB color control (JSON: `{"red": 0-255, "green": 0-255, "blue": 0-255}`)
 
 #### Cartridge Management
 - `GET /api/bus/{busId}/cartridge` - Runtime hours and remaining life percentage
 - `POST /api/bus/{busId}/cartridge/reset` - Reset cartridge runtime tracking
-- `POST /api/bus/{busId}/auto_shutoff` - Set auto-shutoff timer (JSON: `{"seconds": 0-57600}`)
-- `POST /api/bus/{busId}/cartridge_warn_at` - Set warning threshold (JSON: `{"hours": 0-9999}`)
+- `GET  /api/bus/{busId}/auto_shutoff` - Get auto-shutoff timer in minutes
+- `POST /api/bus/{busId}/auto_shutoff` - Set auto-shutoff timer (JSON: `{"minutes": 0-960}`)
+- `GET  /api/bus/{busId}/warn_at` - Get cartridge warning threshold in hours
+- `POST /api/bus/{busId}/warn_at` - Set warning threshold (JSON: `{"hours": 0-9999}`)
 
 ### WiFi Integration Flow
 
 #### Initial Setup
-1. Device boots and creates WiFi AP: `RepelBridge-Setup` (password: `repelbridge`)
-2. User connects and configures WiFi via captive portal
+1. Device boots and creates WiFi AP: `RepelBridgeAP` (password: `repelbridge`)
+2. User connects and configures WiFi via captive portal, BLE, or Improv Serial
 3. Device connects to network and starts mDNS service `_repelbridge._tcp.local.`
 4. Home Assistant discovers device automatically or user adds manually by IP
 
 #### Power Control Integration
 ```cpp
 // WiFi power control sequence
-POST /api/bus/0/power {"power": true} → {
+POST /api/bus/0/power {"state": true} → {
   bus.powerOn()
   if (BUS_OFFLINE) bus.activate()
   if (no repellers) discover_repellers(), retrieve_serial_for_all()
@@ -364,7 +365,7 @@ POST /api/bus/0/power {"power": true} → {
 }
 
 // WiFi power off sequence
-POST /api/bus/0/power {"power": false} → {
+POST /api/bus/0/power {"state": false} → {
   bus.save_active_seconds()
   bus.shutdown_all()
 }
@@ -397,7 +398,7 @@ For each bus (0 and 1):
 
 #### Testing WiFi Mode
 1. Build with `pio run -e esp32-s3-wifi`
-2. Upload firmware and connect to `RepelBridge-Setup` AP
+2. Upload firmware and connect to `RepelBridgeAP` (password: `repelbridge`)
 3. Configure WiFi via captive portal
 4. Test REST API endpoints: `curl http://device-ip/api/system/status`
 5. Verify Home Assistant discovery and entity creation
@@ -411,5 +412,5 @@ For each bus (0 and 1):
 ### WiFi Mode Limitations
 - Requires stable WiFi connection for Home Assistant integration
 - REST API timeout handling may need adjustment for slow repeller responses
-- Currently uses shared Serial1 for both buses (hardware limitation)
+- Both buses share `UART_NUM_1`; only one bus can transact at a time
 - Device must be on same network as Home Assistant for automatic discovery

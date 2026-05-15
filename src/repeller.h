@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <list>
 
 // Repeller state enumeration
 enum RepellerState {

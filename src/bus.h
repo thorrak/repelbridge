@@ -8,7 +8,7 @@
 #include "packet.h"
 #include "repeller.h"
 
-#define BUS_POLLING_INTERVAL_MS 15000  // Poll every second
+#define BUS_POLLING_INTERVAL_MS 15000  // Interval between heartbeat polls
 
 // Bus state enumeration
 enum BusState {
@@ -33,7 +33,7 @@ private:
   int pow_pin;
 
   uint64_t warm_on_at;  // Timestamp when the bus was last warmed up (for tracking auto-off settings)
-  uint64_t active_seconds_last_save_at;  // Timestamp when the bus was last warmed up (for tracking auto-off settings)
+  uint64_t active_seconds_last_save_at;  // Timestamp of the last cartridge_active_seconds increment
 
   uint64_t last_polled;  // Timestamp at which the bus was last polled for repeller status
   

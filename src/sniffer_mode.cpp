@@ -10,10 +10,11 @@
 static const char* TAG = "sniffer";
 
 
-// MAX3485 Pin Connections for ESP32-C6
-// RX pin (DI) - connects to ESP32-C6 TX (GPIO19)
-// TX pin (RO) - connects to ESP32-C6 RX (GPIO22)  
-// DE and RE pins (tied together) - connects to GPIO21 (BUS_0_DIR_PIN)
+// MAX3485 pin connections come from the BUS_0_* build flags in platformio.ini:
+//   RO (Receive Output)  -> BUS_0_RX_PIN  (UART RX)
+//   DI (Driver Input)    -> BUS_0_TX_PIN  (UART TX)
+//   DE/RE (tied)         -> BUS_0_DIR_PIN (direction control)
+// Sniffer mode always holds the DIR pin low (receive only).
 
 
 // UART configuration for RS-485

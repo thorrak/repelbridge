@@ -23,20 +23,17 @@ static uint32_t millis_now() {
 Bus bus0(0);
 Bus bus1(1);
 
-void setup() {
+static void app_setup() {
   vTaskDelay(pdMS_TO_TICKS(5000));
   ESP_LOGI(TAG, "Initializing...");
 
-#ifndef ARDUINO
   // Initialize NVS flash (required for WiFi and other subsystems)
-  // Arduino framework handles this automatically
   esp_err_t nvs_ret = nvs_flash_init();
   if (nvs_ret == ESP_ERR_NVS_NO_FREE_PAGES || nvs_ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
     ESP_ERROR_CHECK(nvs_flash_erase());
     nvs_ret = nvs_flash_init();
   }
   ESP_ERROR_CHECK(nvs_ret);
-#endif
 
   // Initialize LittleFS filesystem via VFS
   esp_vfs_littlefs_conf_t conf = {
@@ -94,13 +91,13 @@ void setup() {
 #endif
 }
 
-static bool ran_once = false;
-void loop() {
+static void app_loop() {
 #ifdef MODE_SNIFFER
   sniffer_loop();
 #endif
 
 #ifdef MODE_CONTROLLER
+    static bool ran_once = false;
     static uint32_t last_heartbeat = 0;
     uint32_t current_time = millis_now();
 
@@ -134,20 +131,14 @@ void loop() {
 #endif
 }
 
-// ESP-IDF native entry point (used when building without Arduino framework)
-#ifndef ARDUINO
-extern "C" void app_main(void) {
-  setup();
-
-  // Create main loop task
-  xTaskCreatePinnedToCore(
-    [](void*) {
-      for(;;) {
-        loop();
-        vTaskDelay(pdMS_TO_TICKS(10));
-      }
-    },
-    "mainLoop", 8192, nullptr, 1, nullptr, 1
-  );
+static void main_task(void*) {
+  for (;;) {
+    app_loop();
+    vTaskDelay(pdMS_TO_TICKS(10));
+  }
 }
-#endif
+
+extern "C" void app_main(void) {
+  app_setup();
+  xTaskCreatePinnedToCore(main_task, "mainLoop", 8192, nullptr, 1, nullptr, 1);
+}

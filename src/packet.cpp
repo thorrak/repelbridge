@@ -245,7 +245,7 @@ const char* Packet::packetName() const {
       snprintf(packet_name_buffer, sizeof(packet_name_buffer), "rx_startup:%02X", data[3]);
       break;
     case RX_STARTUP_00:
-      snprintf(packet_name_buffer, sizeof(packet_name_buffer), "rx_startup_00", data[3]);
+      strcpy(packet_name_buffer, "rx_startup_00");
       break;
     case RX_SER_NO_1: {
       char serial_part[9];

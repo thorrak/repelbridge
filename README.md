@@ -51,21 +51,23 @@ For complete build instructions, see the [build guide](BUILDING.md).
 For my build, material cost excluding shipping/taxes was appx. $97.14 per controller (each of which can manage two banks of repellers)
 
 
-### Pin Connections
+### Pin Connections (Xiao ESP32-S3)
 
 #### Bus 0 (Primary)
 - MAX3485 A/B → RS-485 bus 0 differential pair
-- RO (Receive) → GPIO17 (Serial1 RX)
-- DI (Driver) → GPIO16 (Serial1 TX)  
-- DE/RE (tied) → GPIO23 (Direction control)
-- Power control → GPIO18 (optional)
+- RO (Receive) → GPIO44 (UART RX)
+- DI (Driver) → GPIO43 (UART TX)
+- DE/RE (tied) → GPIO6 (Direction control)
+- Power control → GPIO9
 
 #### Bus 1 (Secondary)
 - MAX3485 A/B → RS-485 bus 1 differential pair
-- RO (Receive) → GPIO22
-- DI (Driver) → GPIO19
-- DE/RE (tied) → GPIO21 (Direction control)
-- Power control → GPIO20
+- RO (Receive) → GPIO5
+- DI (Driver) → GPIO7
+- DE/RE (tied) → GPIO4 (Direction control)
+- Power control → GPIO8
+
+Pin assignments are defined as `BUS_X_*_PIN` build flags in [platformio.ini](platformio.ini) and can be overridden there.
 
 ### Communication Specs
 - **Baud Rate**: 19,200
@@ -82,48 +84,44 @@ For my build, material cost excluding shipping/taxes was appx. $97.14 per contro
 
 ### Prerequisites
 - [PlatformIO](https://platformio.org/) installed
-- ESP32 platform support
+- ESP-IDF toolchain (fetched automatically by PlatformIO)
 - Git for cloning dependencies
 
-### Build Environments
+### Build Environment
 
-The project includes multiple PlatformIO environments:
+The project ships a single PlatformIO environment targeting the Seeed XIAO ESP32-S3 with the ESP-IDF framework:
 
-#### WiFi Controller Mode (Recommended)
 ```bash
 pio run -e esp32-s3-wifi
 ```
 
 ### Dependencies
 Automatically managed by PlatformIO:
-- WiFiManager for network configuration
-- ArduinoJson for REST API responses
-- LittleFS for persistent settings storage
+- `thorrak/esp_wifi_config` for WiFi provisioning (BLE / Improv / captive portal)
+- `bblanchon/ArduinoJson` for REST API responses
+- LittleFS (via ESP-IDF) for persistent settings storage
 
 ## Flashing
 
 ### Initial Flash
-1. Connect ESP32-C6 to computer via USB
+1. Connect the XIAO ESP32-S3 to your computer via USB-C
 2. Build and upload firmware:
    ```bash
-   pio run -e esp32c6dev-wifi -t upload
+   pio run -e esp32-s3-wifi -t upload
    ```
 3. Monitor serial output:
    ```bash
-   pio device monitor -e esp32c6dev-wifi
+   pio device monitor -e esp32-s3-wifi
    ```
 
 ### WiFi Setup (First Boot)
-1. Device creates WiFi access point: `RepelBridge-Setup`
+1. Device creates WiFi access point: `RepelBridgeAP`
 2. Connect to AP using password: `repelbridge`
-3. Configure your WiFi network via captive portal
+3. Configure your WiFi network via captive portal (BLE and Improv Serial provisioning are also supported)
 4. Device will restart and connect to your network
 
 ### Mode Selection
-Change build environment or modify `src/main.cpp` to select operational mode:
-- `MODE_SNIFFER` - Passive packet monitoring
-- `MODE_CONTROLLER` - Direct device control
-- `MODE_WIFI_CONTROLLER` - Web API control (default)
+Operational mode is selected at compile time via build flags in [platformio.ini](platformio.ini). The shipped `esp32-s3-wifi` environment defines `MODE_WIFI_CONTROLLER`. Alternate modes (`MODE_SNIFFER`, `MODE_CONTROLLER`) are still supported in the source and can be enabled by swapping the build flag.
 
 ## Home Assistant Integration
 
@@ -207,15 +205,17 @@ Direct API access available at `http://device-ip/`:
 
 **Bus Control** (replace `{0,1}` with bus number)
 - `GET /api/bus/{0,1}/status` - Bus state and current settings
-- `POST /api/bus/{0,1}/power` - Power control (JSON: `{"power": true/false}`)
-- `POST /api/bus/{0,1}/brightness` - Brightness (JSON: `{"brightness": 0-255}`)
+- `POST /api/bus/{0,1}/power` - Power control (JSON: `{"state": true/false}`)
+- `POST /api/bus/{0,1}/brightness` - Brightness (JSON: `{"value": 0-255}`)
 - `POST /api/bus/{0,1}/color` - RGB color (JSON: `{"red": 0-255, "green": 0-255, "blue": 0-255}`)
 
 **Cartridge Management**
 - `GET /api/bus/{0,1}/cartridge` - Usage stats and remaining life
 - `POST /api/bus/{0,1}/cartridge/reset` - Reset runtime counter
-- `POST /api/bus/{0,1}/auto_shutoff` - Set auto-shutoff timer (JSON: `{"seconds": 0-57600}`)
-- `POST /api/bus/{0,1}/cartridge_warn_at` - Set warning threshold (JSON: `{"hours": 0-9999}`)
+- `GET /api/bus/{0,1}/auto_shutoff` - Get current auto-shutoff timer in minutes
+- `POST /api/bus/{0,1}/auto_shutoff` - Set auto-shutoff timer (JSON: `{"minutes": 0-960}`)
+- `GET /api/bus/{0,1}/warn_at` - Get current cartridge warning threshold in hours
+- `POST /api/bus/{0,1}/warn_at` - Set warning threshold (JSON: `{"hours": 0-9999}`)
 
 ## Troubleshooting
 
