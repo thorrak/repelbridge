@@ -5,3 +5,6 @@ dependencies:
     version: "^1.14"
   espressif/mdns:
     version: "^1.2"
+  thorrak/esp_wifi_config:
+    git: https://github.com/thorrak/esp_wifi_config.git
+    version: main
