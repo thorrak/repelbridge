@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a0e14">
+<title>RepelBridge</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  :root{
+    --bg:#070a0f;
+    --panel:rgba(255,255,255,.04);
+    --panel-2:rgba(255,255,255,.07);
+    --border:rgba(255,255,255,.08);
+    --border-strong:rgba(255,255,255,.16);
+    --fg:#e8edf5;
+    --muted:#8a93a6;
+    --accent:#7cf0c4;
+    --warn:#ffb454;
+    --err:#ff6868;
+    --ok:#7cf0c4;
+    --radius:14px;
+    --shadow:0 24px 60px -28px rgba(0,0,0,.6);
+    color-scheme:dark;
+  }
+  html,body{margin:0;padding:0;min-height:100%}
+  body{
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+    color:var(--fg);
+    background:
+      radial-gradient(1100px 700px at 12% -10%,rgba(124,240,196,.10),transparent 60%),
+      radial-gradient(900px 600px at 95% 110%,rgba(120,140,255,.10),transparent 65%),
+      var(--bg);
+    background-attachment:fixed;
+    min-height:100vh;
+    letter-spacing:.005em;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:980px;margin:0 auto;padding:28px 20px 56px}
+  header{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:16px;margin-bottom:28px;flex-wrap:wrap;
+  }
+  .brand{display:flex;align-items:center;gap:12px;font-weight:600;font-size:18px;letter-spacing:.01em}
+  .logo{
+    width:34px;height:34px;border-radius:10px;
+    background:conic-gradient(from 220deg,#7cf0c4,#5d9bff,#b675ff,#7cf0c4);
+    box-shadow:0 0 0 1px rgba(255,255,255,.12),0 10px 30px -8px rgba(124,240,196,.4);
+    position:relative;
+  }
+  .logo::after{
+    content:"";position:absolute;inset:6px;border-radius:6px;background:var(--bg);
+  }
+  .sysbar{
+    display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted);
+  }
+  .chip{
+    background:var(--panel);border:1px solid var(--border);
+    padding:6px 10px;border-radius:999px;display:inline-flex;align-items:center;gap:6px;
+  }
+  .chip b{color:var(--fg);font-weight:500}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);box-shadow:0 0 0 0 currentColor}
+  .dot.ok{background:var(--ok);box-shadow:0 0 12px var(--ok)}
+  .dot.warn{background:var(--warn)}
+  .dot.err{background:var(--err)}
+  .dot.warming{background:var(--warn);animation:pulse 1.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:18px}
+  .card{
+    position:relative;
+    background:linear-gradient(180deg,var(--panel-2),var(--panel));
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:20px;
+    box-shadow:var(--shadow);
+    transition:border-color .25s ease, transform .25s ease;
+    overflow:hidden;
+  }
+  .card::before{
+    content:"";position:absolute;inset:-1px;border-radius:var(--radius);
+    pointer-events:none;opacity:.6;
+    background:radial-gradient(380px 220px at var(--gx,30%) -20%,var(--accent-rgb,rgba(124,240,196,.25)),transparent 60%);
+    transition:opacity .3s ease;
+  }
+  .card.on::before{opacity:1}
+  .card.dim{opacity:.55}
+
+  .card-head{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;
+  }
+  .bus-title{display:flex;align-items:center;gap:10px}
+  .bus-name{font-weight:600;font-size:16px}
+  .bus-sub{color:var(--muted);font-size:12px}
+  .state{
+    font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;
+    padding:5px 9px;border-radius:6px;background:var(--panel);border:1px solid var(--border);color:var(--muted);
+    display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+  }
+  .state.repelling{color:var(--ok);border-color:rgba(124,240,196,.35);background:rgba(124,240,196,.08)}
+  .state.warming{color:var(--warn);border-color:rgba(255,180,84,.35);background:rgba(255,180,84,.08)}
+  .state.offline{color:var(--muted)}
+  .state.error{color:var(--err);border-color:rgba(255,104,104,.35);background:rgba(255,104,104,.08)}
+
+  .controls{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center}
+
+  .power{
+    position:relative;width:84px;height:84px;border-radius:50%;
+    background:radial-gradient(circle at 30% 25%,rgba(255,255,255,.08),rgba(255,255,255,.02) 60%);
+    border:1px solid var(--border-strong);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    transition:all .25s ease;
+    flex:none;
+  }
+  .power svg{width:30px;height:30px;color:var(--muted);transition:color .25s ease,transform .25s ease}
+  .power:hover{transform:translateY(-1px);border-color:rgba(255,255,255,.32)}
+  .power.on{
+    background:radial-gradient(circle at 30% 25%,var(--ledc,#7cf0c4),rgba(0,0,0,.4) 75%);
+    border-color:var(--ledc,#7cf0c4);
+    box-shadow:0 0 0 6px rgba(124,240,196,.08),0 0 38px -6px var(--ledc,#7cf0c4);
+  }
+  .power.on svg{color:#0a0e14;transform:scale(1.05)}
+  .power.busy::after{
+    content:"";position:absolute;inset:-4px;border-radius:50%;
+    border:2px solid transparent;border-top-color:var(--accent);
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .quick{display:flex;flex-direction:column;gap:6px;min-width:0}
+  .quick .row{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted)}
+  .quick .row b{color:var(--fg);font-weight:500}
+
+  .gauge{
+    --pct:100;
+    --ring-color:var(--accent);
+    width:64px;height:64px;border-radius:50%;flex:none;
+    background:conic-gradient(var(--ring-color) calc(var(--pct) * 1%),rgba(255,255,255,.07) 0);
+    position:relative;display:flex;align-items:center;justify-content:center;
+    transition:background .4s ease;
+  }
+  .gauge::after{
+    content:"";position:absolute;inset:6px;border-radius:50%;background:#0e131a;
+  }
+  .gauge span{position:relative;font-size:13px;font-weight:600;color:var(--fg)}
+  .gauge.low{--ring-color:var(--warn)}
+  .gauge.crit{--ring-color:var(--err)}
+
+  .section{
+    margin-top:18px;padding-top:16px;border-top:1px dashed var(--border);
+  }
+  .section h4{
+    margin:0 0 12px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--muted);font-weight:600;
+  }
+  .field{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+  .field:last-child{margin-bottom:0}
+  .field label{font-size:13px;color:var(--muted);min-width:90px}
+  .field .val{color:var(--fg);font-variant-numeric:tabular-nums;font-size:13px;min-width:46px;text-align:right}
+
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;
+    flex:1;height:6px;background:rgba(255,255,255,.06);border-radius:6px;outline:none;cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;
+    background:var(--accent);border:2px solid #0a0e14;
+    box-shadow:0 0 0 1px rgba(255,255,255,.2),0 0 14px -2px var(--accent);cursor:grab;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:18px;height:18px;border-radius:50%;background:var(--accent);border:2px solid #0a0e14;
+  }
+
+  input[type=color]{
+    -webkit-appearance:none;appearance:none;width:38px;height:38px;border-radius:50%;
+    border:1px solid var(--border-strong);background:transparent;cursor:pointer;padding:0;overflow:hidden;
+  }
+  input[type=color]::-webkit-color-swatch-wrapper{padding:2px;border-radius:50%}
+  input[type=color]::-webkit-color-swatch{border:none;border-radius:50%}
+  input[type=color]::-moz-color-swatch{border:none;border-radius:50%}
+
+  input[type=number]{
+    background:var(--panel);border:1px solid var(--border);color:var(--fg);
+    padding:7px 10px;border-radius:8px;width:90px;font:inherit;text-align:right;
+    font-variant-numeric:tabular-nums;
+  }
+  input[type=number]:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(124,240,196,.12)}
+  input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  input[type=number]{-moz-appearance:textfield}
+
+  button.btn{
+    background:var(--panel);border:1px solid var(--border-strong);color:var(--fg);
+    padding:7px 12px;border-radius:8px;cursor:pointer;font:inherit;font-size:12px;
+    transition:all .15s ease;
+  }
+  button.btn:hover{background:var(--panel-2);border-color:#fff3}
+  button.btn.danger{color:var(--warn)}
+  button.btn.danger:hover{background:rgba(255,180,84,.08);border-color:rgba(255,180,84,.4);color:var(--warn)}
+  button.btn:disabled{opacity:.4;cursor:not-allowed}
+
+  .swatch{
+    width:38px;height:38px;border-radius:50%;border:1px solid var(--border-strong);
+    box-shadow:0 0 18px -4px currentColor;flex:none;
+  }
+  .color-row{display:flex;align-items:center;gap:12px;flex:1}
+  .color-row .hex{font:13px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);letter-spacing:.04em}
+
+  footer{
+    margin-top:32px;text-align:center;color:var(--muted);font-size:11px;
+    display:flex;justify-content:center;gap:14px;flex-wrap:wrap;
+  }
+  footer code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--fg)}
+
+  .toast{
+    position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);
+    background:rgba(20,26,34,.92);backdrop-filter:blur(10px);
+    color:var(--fg);border:1px solid var(--border-strong);
+    padding:10px 16px;border-radius:10px;font-size:13px;
+    opacity:0;pointer-events:none;transition:all .25s ease;z-index:10;
+    box-shadow:var(--shadow);
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.err{border-color:rgba(255,104,104,.4);color:#ffb4b4}
+
+  .skel{background:linear-gradient(90deg,rgba(255,255,255,.04),rgba(255,255,255,.09),rgba(255,255,255,.04));
+        background-size:200% 100%;animation:shimmer 1.4s infinite;border-radius:6px;display:inline-block;height:1em;width:3em}
+  @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+  @media (max-width:520px){
+    .wrap{padding:18px 14px 40px}
+    .controls{grid-template-columns:1fr;text-align:center;justify-items:center}
+    .power{margin:0 auto}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><div class="logo"></div><span>RepelBridge</span></div>
+    <div class="sysbar">
+      <span class="chip"><span id="wifi-dot" class="dot"></span><b id="wifi-ssid">—</b></span>
+      <span class="chip">ip <b id="wifi-ip">—</b></span>
+      <span class="chip">uptime <b id="sys-uptime">—</b></span>
+    </div>
+  </header>
+
+  <main class="grid" id="buses"></main>
+
+  <footer>
+    <span>guid <code id="sys-guid">—</code></span>
+    <span>free heap <code id="sys-heap">—</code></span>
+    <span>rssi <code id="sys-rssi">—</code></span>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<template id="bus-tpl">
+<section class="card" data-bus>
+  <div class="card-head">
+    <div class="bus-title">
+      <div>
+        <div class="bus-name">Bus <span data-bus-id></span></div>
+        <div class="bus-sub"><span data-repeller-count>0</span> repellers</div>
+      </div>
+    </div>
+    <span class="state offline" data-state>Offline</span>
+  </div>
+
+  <div class="controls">
+    <button class="power" data-power aria-label="Toggle power">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v9"/><path d="M5.6 7.6a8 8 0 1 0 12.8 0"/>
+      </svg>
+    </button>
+    <div class="quick">
+      <div class="row"><span>state</span><b data-state-text>—</b></div>
+      <div class="row"><span>cartridge</span><b><span data-runtime-hours>—</span> hrs used</b></div>
+      <div class="row"><span>remaining</span><b data-pct-text>—</b></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h4>Light</h4>
+    <div class="field">
+      <label>Brightness</label>
+      <input type="range" min="0" max="255" step="1" data-brightness>
+      <span class="val" data-brightness-val>0</span>
+    </div>
+    <div class="field">
+      <label>Color</label>
+      <div class="color-row">
+        <input type="color" data-color value="#03d5ff">
+        <span class="swatch" data-swatch></span>
+        <span class="hex" data-hex>#03d5ff</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h4>Cartridge</h4>
+    <div class="field">
+      <label>Hours used</label>
+      <span class="val"><span data-runtime-hours-2>—</span> / <span data-warn-hours-display>—</span> hr</span>
+      <div class="gauge" data-gauge><span data-pct-text-2>—</span></div>
+      <button class="btn danger" data-reset>Reset</button>
+    </div>
+    <div class="field">
+      <label>Warn at</label>
+      <input type="number" min="0" max="9999" step="1" data-warn-hours>
+      <span class="val">hr</span>
+    </div>
+    <div class="field">
+      <label>Auto shut-off</label>
+      <input type="number" min="0" max="960" step="5" data-shutoff>
+      <span class="val">min</span>
+    </div>
+  </div>
+</section>
+</template>
+
+<script>
+(() => {
+  const BUS_IDS = [0, 1];
+  const POLL_MS = 5000;
+
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+  const toastEl = $('#toast');
+  let toastTimer;
+  const toast = (msg, isErr) => {
+    toastEl.textContent = msg;
+    toastEl.classList.toggle('err', !!isErr);
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2400);
+  };
+
+  const fmtUptime = ms => {
+    const s = Math.floor(ms / 1000);
+    const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+    if (d) return `${d}d ${h}h`;
+    if (h) return `${h}h ${m}m`;
+    return `${m}m`;
+  };
+  const fmtBytes = n => n > 1024 ? (n / 1024).toFixed(1) + ' KB' : n + ' B';
+  const toHex = (r, g, b) => '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+  const fromHex = h => {
+    const v = parseInt(h.slice(1), 16);
+    return { red: (v >> 16) & 0xff, green: (v >> 8) & 0xff, blue: v & 0xff };
+  };
+
+  // ---- API ----
+  const api = async (path, opts = {}) => {
+    const r = await fetch(path, {
+      headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
+      ...opts,
+    });
+    if (!r.ok) {
+      let err = `HTTP ${r.status}`;
+      try { const j = await r.json(); err = j.error || err; } catch {}
+      throw new Error(err);
+    }
+    return r.json();
+  };
+
+  // ---- Bus component ----
+  class BusCard {
+    constructor(busId) {
+      this.busId = busId;
+      this.lastStatus = null;
+      this.lastCart = null;
+      this.busy = false;
+      this.pending = {};
+      const tpl = $('#bus-tpl').content.cloneNode(true);
+      this.root = tpl.querySelector('[data-bus]');
+      this.root.dataset.bus = busId;
+      this.q = sel => this.root.querySelector(sel);
+
+      this.q('[data-bus-id]').textContent = busId;
+      this.q('[data-power]').addEventListener('click', () => this.togglePower());
+      this.q('[data-reset]').addEventListener('click', () => this.resetCartridge());
+
+      // brightness — live preview, commit on release
+      const brEl = this.q('[data-brightness]');
+      brEl.addEventListener('input', () => this.q('[data-brightness-val]').textContent = brEl.value);
+      brEl.addEventListener('change', () => this.setBrightness(parseInt(brEl.value, 10)));
+
+      const cEl = this.q('[data-color]');
+      cEl.addEventListener('input', () => this.q('[data-hex]').textContent = cEl.value);
+      cEl.addEventListener('change', () => this.setColor(cEl.value));
+
+      const warnEl = this.q('[data-warn-hours]');
+      warnEl.addEventListener('change', () => this.setWarnAt(parseInt(warnEl.value, 10)));
+
+      const shutEl = this.q('[data-shutoff]');
+      shutEl.addEventListener('change', () => this.setShutoff(parseInt(shutEl.value, 10)));
+    }
+
+    setBusy(b) {
+      this.busy = b;
+      this.q('[data-power]').classList.toggle('busy', b);
+    }
+
+    renderStatus(s) {
+      this.lastStatus = s;
+      const stEl = this.q('[data-state]');
+      const stText = (s.state || 'BUS_OFFLINE').replace('BUS_', '');
+      stEl.textContent = stText.replace('_', ' ').toLowerCase();
+      stEl.className = 'state ' + (
+        s.state === 'BUS_REPELLING' ? 'repelling'
+        : s.state === 'BUS_WARMING_UP' ? 'warming'
+        : s.state === 'BUS_ERROR' ? 'error'
+        : 'offline'
+      );
+      this.q('[data-state-text]').textContent = stText.toLowerCase();
+      this.q('[data-repeller-count]').textContent = s.repeller_count ?? 0;
+
+      const on = s.powered === true && s.state !== 'BUS_OFFLINE';
+      const power = this.q('[data-power]');
+      power.classList.toggle('on', on);
+      this.root.classList.toggle('on', on);
+
+      // accent color from current LED
+      const { red = 3, green = 213, blue = 255 } = s.color || {};
+      const hex = toHex(red, green, blue);
+      this.root.style.setProperty('--ledc', hex);
+      this.root.style.setProperty('--accent-rgb', `rgba(${red},${green},${blue},.22)`);
+      const swatch = this.q('[data-swatch]');
+      swatch.style.background = hex;
+      swatch.style.color = hex;
+      this.q('[data-hex]').textContent = hex;
+      if (!this.pending.color) this.q('[data-color]').value = hex;
+
+      const br = s.brightness ?? 0;
+      if (!this.pending.brightness) {
+        this.q('[data-brightness]').value = br;
+        this.q('[data-brightness-val]').textContent = br;
+      }
+    }
+
+    renderCartridge(c) {
+      this.lastCart = c;
+      const hrs = c.runtime_hours ?? 0;
+      const pct = Math.max(0, Math.min(100, c.percent_left ?? 0));
+      this.q('[data-runtime-hours]').textContent = hrs;
+      this.q('[data-runtime-hours-2]').textContent = hrs;
+      this.q('[data-pct-text]').textContent = pct + '%';
+      this.q('[data-pct-text-2]').textContent = pct + '%';
+      this.q('[data-warn-hours-display]').textContent = c.warn_at_hours ?? '—';
+
+      const gauge = this.q('[data-gauge]');
+      gauge.style.setProperty('--pct', pct);
+      gauge.classList.toggle('crit', pct < 10);
+      gauge.classList.toggle('low', pct >= 10 && pct < 25);
+
+      if (!this.pending.warn) this.q('[data-warn-hours]').value = c.warn_at_hours ?? 0;
+      if (!this.pending.shutoff) {
+        const mins = Math.round((c.auto_shutoff_seconds ?? 0) / 60);
+        this.q('[data-shutoff]').value = mins;
+      }
+    }
+
+    async refresh() {
+      try {
+        const [s, c] = await Promise.all([
+          api(`/api/bus/${this.busId}/status`),
+          api(`/api/bus/${this.busId}/cartridge`),
+        ]);
+        this.renderStatus(s);
+        this.renderCartridge(c);
+        this.root.classList.remove('dim');
+      } catch (e) {
+        this.root.classList.add('dim');
+      }
+    }
+
+    async togglePower() {
+      if (this.busy) return;
+      const next = !(this.lastStatus && this.lastStatus.powered && this.lastStatus.state !== 'BUS_OFFLINE');
+      this.setBusy(true);
+      try {
+        const s = await api(`/api/bus/${this.busId}/power`, {
+          method: 'POST',
+          body: JSON.stringify({ state: next }),
+        });
+        this.renderStatus(s);
+        toast(`Bus ${this.busId} ${next ? 'powering on' : 'shut down'}`);
+      } catch (e) {
+        toast(e.message, true);
+      } finally {
+        this.setBusy(false);
+        this.refresh();
+      }
+    }
+
+    async setBrightness(v) {
+      this.pending.brightness = true;
+      try {
+        const s = await api(`/api/bus/${this.busId}/brightness`, {
+          method: 'POST', body: JSON.stringify({ value: v }),
+        });
+        this.renderStatus(s);
+      } catch (e) { toast(e.message, true); }
+      finally { this.pending.brightness = false; }
+    }
+
+    async setColor(hex) {
+      this.pending.color = true;
+      try {
+        const { red, green, blue } = fromHex(hex);
+        const s = await api(`/api/bus/${this.busId}/color`, {
+          method: 'POST', body: JSON.stringify({ red, green, blue }),
+        });
+        this.renderStatus(s);
+      } catch (e) { toast(e.message, true); }
+      finally { this.pending.color = false; }
+    }
+
+    async setWarnAt(hours) {
+      this.pending.warn = true;
+      try {
+        await api(`/api/bus/${this.busId}/warn_at`, {
+          method: 'POST', body: JSON.stringify({ hours }),
+        });
+        toast(`Bus ${this.busId} warn-at set to ${hours} hr`);
+        await this.refresh();
+      } catch (e) { toast(e.message, true); }
+      finally { this.pending.warn = false; }
+    }
+
+    async setShutoff(minutes) {
+      this.pending.shutoff = true;
+      try {
+        await api(`/api/bus/${this.busId}/auto_shutoff`, {
+          method: 'POST', body: JSON.stringify({ minutes }),
+        });
+        toast(`Bus ${this.busId} auto-shutoff: ${minutes} min`);
+        await this.refresh();
+      } catch (e) { toast(e.message, true); }
+      finally { this.pending.shutoff = false; }
+    }
+
+    async resetCartridge() {
+      if (!confirm(`Reset cartridge runtime for bus ${this.busId}?`)) return;
+      try {
+        const c = await api(`/api/bus/${this.busId}/cartridge/reset`, { method: 'POST' });
+        this.renderCartridge(c);
+        toast(`Bus ${this.busId} cartridge reset`);
+      } catch (e) { toast(e.message, true); }
+    }
+  }
+
+  // ---- Bootstrap ----
+  const cards = {};
+  const busesEl = $('#buses');
+  for (const id of BUS_IDS) {
+    const card = new BusCard(id);
+    cards[id] = card;
+    busesEl.appendChild(card.root);
+  }
+
+  const refreshSystem = async () => {
+    try {
+      const s = await api('/api/system/status');
+      $('#sys-guid').textContent = s.guid || '—';
+      $('#sys-heap').textContent = s.free_heap ? fmtBytes(s.free_heap) : '—';
+      $('#sys-uptime').textContent = s.uptime_ms != null ? fmtUptime(s.uptime_ms) : '—';
+      const w = s.wifi || {};
+      $('#wifi-ssid').textContent = w.ssid || w.state || 'wifi';
+      $('#wifi-ip').textContent = w.ip || '—';
+      $('#sys-rssi').textContent = (w.rssi != null) ? `${w.rssi} dBm` : '—';
+      const dot = $('#wifi-dot');
+      dot.className = 'dot ' + (w.state === 'connected' ? 'ok' : 'err');
+    } catch {
+      $('#wifi-dot').className = 'dot err';
+    }
+  };
+
+  const refreshAll = async () => {
+    await Promise.all([refreshSystem(), ...Object.values(cards).map(c => c.refresh())]);
+  };
+
+  refreshAll();
+  setInterval(refreshAll, POLL_MS);
+})();
+</script>
+</body>
+</html>

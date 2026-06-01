@@ -56,7 +56,7 @@ httpd_handle_t wifi_setup_init() {
     // Create HTTP server — we own it, and pass it to the library
     httpd_handle_t http_server = NULL;
     httpd_config_t http_config = HTTPD_DEFAULT_CONFIG();
-    http_config.max_uri_handlers = 32;  // Room for our routes + library routes
+    http_config.max_uri_handlers = 48;  // Room for our routes + library routes + static UI fallback
     http_config.uri_match_fn = httpd_uri_match_wildcard;
 
     if (httpd_start(&http_server, &http_config) != ESP_OK) {

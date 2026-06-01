@@ -6,6 +6,7 @@
 #include "esp_wifi_config.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <sys/stat.h>
 
 static const char* TAG = "wifi_ctrl";
 
@@ -341,6 +342,85 @@ static esp_err_t handle_system_status(httpd_req_t *req) {
     return send_json_response(req, 200, buf);
 }
 
+// --- Static file serving from LittleFS (/littlefs/) ---
+
+static const char* mime_for_path(const char* path) {
+    const char* dot = strrchr(path, '.');
+    if (!dot) return "application/octet-stream";
+    if (!strcmp(dot, ".html") || !strcmp(dot, ".htm")) return "text/html; charset=utf-8";
+    if (!strcmp(dot, ".js"))   return "application/javascript; charset=utf-8";
+    if (!strcmp(dot, ".css"))  return "text/css; charset=utf-8";
+    if (!strcmp(dot, ".json")) return "application/json; charset=utf-8";
+    if (!strcmp(dot, ".svg"))  return "image/svg+xml";
+    if (!strcmp(dot, ".png"))  return "image/png";
+    if (!strcmp(dot, ".jpg") || !strcmp(dot, ".jpeg")) return "image/jpeg";
+    if (!strcmp(dot, ".ico"))  return "image/x-icon";
+    if (!strcmp(dot, ".woff2")) return "font/woff2";
+    if (!strcmp(dot, ".txt") || !strcmp(dot, ".md")) return "text/plain; charset=utf-8";
+    return "application/octet-stream";
+}
+
+static esp_err_t handle_static_file(httpd_req_t *req) {
+    // Strip query string
+    char uri[96];
+    strncpy(uri, req->uri, sizeof(uri) - 1);
+    uri[sizeof(uri) - 1] = '\0';
+    char *q = strchr(uri, '?');
+    if (q) *q = '\0';
+
+    // Reject path traversal — refuse anything containing ".."
+    if (strstr(uri, "..")) {
+        return send_error_response(req, 400, "Bad path");
+    }
+
+    // Map "/" → "/index.html"
+    const char *file = uri;
+    if (file[0] == '\0' || !strcmp(file, "/")) file = "/index.html";
+
+    char fs_path[128];
+    snprintf(fs_path, sizeof(fs_path), "/littlefs%s", file);
+
+    // Prefer gzipped variant if both exist
+    char gz_path[132];
+    snprintf(gz_path, sizeof(gz_path), "%s.gz", fs_path);
+
+    struct stat st;
+    bool gzipped = (stat(gz_path, &st) == 0);
+    const char *open_path = gzipped ? gz_path : fs_path;
+
+    FILE *f = fopen(open_path, "r");
+    if (!f) {
+        // SPA fallback: any unknown path → index.html, so deep links work
+        if (strcmp(file, "/index.html") != 0) {
+            f = fopen("/littlefs/index.html", "r");
+            if (f) {
+                file = "/index.html";
+                gzipped = false;
+            }
+        }
+        if (!f) {
+            ESP_LOGW(TAG, "Static 404: %s", req->uri);
+            return send_error_response(req, 404, "Not found");
+        }
+    }
+
+    httpd_resp_set_type(req, mime_for_path(file));
+    if (gzipped) httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+    httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=300");
+
+    char buf[1024];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
+        if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) {
+            fclose(f);
+            return ESP_FAIL;
+        }
+    }
+    httpd_resp_send_chunk(req, NULL, 0);
+    fclose(f);
+    return ESP_OK;
+}
+
 // --- Register RepelBridge routes on the shared HTTP server ---
 
 static void register_http_routes(httpd_handle_t server) {
@@ -375,6 +455,13 @@ static void register_http_routes(httpd_handle_t server) {
 
     // System endpoint
     REGISTER_URI("/api/system/status",         HTTP_GET,  handle_system_status);
+
+    // Static UI fallback — must register LAST so /api/* routes win first-match.
+    // The library may temporarily own "/" while provisioning; once it tears
+    // its routes down our wildcard catches the slot. /index.html is registered
+    // explicitly so it still resolves while "/" is library-owned.
+    REGISTER_URI("/index.html",                HTTP_GET,  handle_static_file);
+    REGISTER_URI("/*",                         HTTP_GET,  handle_static_file);
 
     #undef REGISTER_URI
 
