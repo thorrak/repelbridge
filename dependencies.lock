@@ -1,6 +1,6 @@
 dependencies:
   espressif/mdns:
-    component_hash: 1ebe3bd675bb9d1c58f52bc0b609b32f74e572b01c328f9e61282040c775495c
+    component_hash: e81ca7a7f53ea34e78274df054da692c272e1315572876b237b1748e267c013b
     dependencies:
     - name: idf
       require: private
@@ -8,13 +8,13 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.11.0
+    version: 1.11.3
   idf:
     source:
       type: idf
     version: 5.4.1
   joltwallet/littlefs:
-    component_hash: dcea25bcef2de023f089f5f01e8d8c46ad1b8ffef75861ad5ffb4098555839df
+    component_hash: 3af20a3d75c49db9dc2286fd50862c34055c9f578419ad1f2bf7ed3ed01391fe
     dependencies:
     - name: idf
       require: private
@@ -22,36 +22,16 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.20.4
-  thorrak/esp_bus:
-    component_hash: 605ccb6d50f533093df2ebae17cf82e21d79d3e2f1add5afe2c78e9620ab94a0
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    targets:
-    - esp32
-    - esp32s2
-    - esp32s3
-    - esp32c2
-    - esp32c3
-    - esp32c6
-    - esp32h2
-    version: 1.0.3
+    version: 1.22.3
   thorrak/esp_wifi_config:
-    component_hash: a4d86f928f097d0fcd8bc2ecf3f1bef63e8495c14db39e943f3d30ee13de1e3a
+    component_hash: 3dc6f3471f4eeebaf7f93a9431e4c3a593a8e2303550efb07538e4da5d8f9fe9
     dependencies:
     - name: idf
-      version: '>=5.0.0'
-    - name: thorrak/esp_bus
-      version: ^1.0.3
+      require: private
+      version: '>=5.4'
     source:
-      git: https://github.com/thorrak/esp_wifi_config.git
-      path: .
-      type: git
+      registry_url: https://components.espressif.com/
+      type: service
     targets:
     - esp32
     - esp32s2
@@ -59,12 +39,12 @@ dependencies:
     - esp32c3
     - esp32c6
     - esp32h2
-    version: 3049b2ba86f79ba9a7e1c0e4d723baac8968d5cc
+    version: 0.2.0
 direct_dependencies:
 - espressif/mdns
 - idf
 - joltwallet/littlefs
 - thorrak/esp_wifi_config
-manifest_hash: dc3a86cf0ebc8e98ce9a978b7e6c8d44f23f9ee291f0ce84901243ede8625055
+manifest_hash: bb9d45376b9524657a756daee7de0665cbb074ee106273a111de9514378d6e1c
 target: esp32s3
 version: 2.0.0

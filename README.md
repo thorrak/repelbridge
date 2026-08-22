@@ -97,7 +97,7 @@ pio run -e esp32-s3-wifi
 
 ### Dependencies
 Automatically managed by PlatformIO:
-- `thorrak/esp_wifi_config` for WiFi provisioning (BLE / Improv / captive portal)
+- `thorrak/esp_wifi_config` for WiFi provisioning (captive portal / Network Provisioning over BLE)
 - `bblanchon/ArduinoJson` for REST API responses
 - LittleFS (via ESP-IDF) for persistent settings storage
 
@@ -117,7 +117,7 @@ Automatically managed by PlatformIO:
 ### WiFi Setup (First Boot)
 1. Device creates WiFi access point: `RepelBridgeAP`
 2. Connect to AP using password: `repelbridge`
-3. Configure your WiFi network via captive portal (BLE and Improv Serial provisioning are also supported)
+3. Configure your WiFi network via captive portal (BLE provisioning is also supported)
 4. Device will restart and connect to your network
 
 ### Mode Selection

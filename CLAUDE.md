@@ -93,7 +93,7 @@ All packets are 11 bytes: `AA XX YY ZZ ...` where:
 - `src/repeller.h` - Repeller device management
 - `src/known_packets.h` - Predefined packet definitions
 - `src/wifi_controller.h/.cpp` - WiFi web server and REST API for Home Assistant integration
-- `src/wifi_setup.h/.cpp` - WiFi provisioning via `esp_wifi_config` (BLE, Improv, captive portal)
+- `src/wifi_setup.h/.cpp` - WiFi provisioning via `esp_wifi_config` (SoftAP captive portal + ESP-IDF Network Provisioning over BLE)
 - `src/getGuid.h/.cpp` - Device identification utilities
 - `src/CMakeLists.txt` / `src/idf_component.yml` - ESP-IDF component manifests
 
@@ -217,7 +217,10 @@ void Bus::setRGB(uint8_t red, uint8_t green, uint8_t blue);
 - **SDK defaults**: `sdkconfig.defaults`
 - **Library Dependencies**:
   - `bblanchon/ArduinoJson` - REST API JSON serialization
-  - `thorrak/esp_wifi_config` - WiFi provisioning (BLE / Improv Serial / captive portal web UI)
+  - `thorrak/esp_wifi_config` (>= 0.2.0) - WiFi provisioning (SoftAP captive portal + Network Provisioning over BLE).
+    Transports are selected by `CONFIG_WIFI_CFG_*` in `sdkconfig.defaults`; Improv and the
+    library's own Web UI are off because RepelBridge serves its control UI from LittleFS.
+    Library events arrive on the default event loop under `WIFI_CFG_EVENT`.
 
 ### Build Commands
 ```bash
@@ -350,7 +353,7 @@ WiFiRepellerDevice* wifi_bus1_device; // Bus 1 control
 
 #### Initial Setup
 1. Device boots and creates WiFi AP: `RepelBridgeAP` (password: `repelbridge`)
-2. User connects and configures WiFi via captive portal, BLE, or Improv Serial
+2. User connects and configures WiFi via captive portal or BLE (Espressif's "ESP BLE Provisioning" app)
 3. Device connects to network and starts mDNS service `_repelbridge._tcp.local.`
 4. Home Assistant discovers device automatically or user adds manually by IP
 
