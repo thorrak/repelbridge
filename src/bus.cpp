@@ -5,8 +5,10 @@
 #include "driver/gpio.h"
 #include "driver/uart.h"
 #include "esp_vfs.h"
+#include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include <cinttypes>
 #include <cstdio>
 #include <sys/stat.h>
@@ -18,18 +20,61 @@ static const char* TAG = "bus";
 #define RS485_BAUD_RATE 19200
 #define RS485_BUF_SIZE 256
 
+// How often the cartridge runtime counter is flushed to the filesystem while a
+// bus is running. It used to be written only on a graceful power-off, so any
+// reset or power loss discarded the entire running session.
+#define CARTRIDGE_SAVE_INTERVAL_US (300ULL * 1000000ULL)
+
 static uint32_t millis_now() {
   return (uint32_t)(esp_timer_get_time() / 1000);
 }
 
+// Both buses share RS485_UART_NUM, and the HTTP handlers (httpd task) drive the
+// same Bus objects as the periodic poll in the main task. Every entry point that
+// touches the UART or mutates bus state serialises on this recursive mutex, so a
+// long transaction (discovery, warm-up) cannot have the UART pulled out from
+// under it by the other task.
+static SemaphoreHandle_t bus_lock() {
+  static SemaphoreHandle_t lock = xSemaphoreCreateRecursiveMutex();
+  return lock;
+}
 
-uint8_t active_bus_id = -1;  // Global variable to track the currently active bus ID
+class BusLock {
+public:
+  BusLock() { xSemaphoreTakeRecursive(bus_lock(), portMAX_DELAY); }
+  ~BusLock() { xSemaphoreGiveRecursive(bus_lock()); }
+  BusLock(const BusLock&) = delete;
+  BusLock& operator=(const BusLock&) = delete;
+};
+
+// Settings live behind their own short-held mutex so that reading or changing a
+// stored value never queues behind a multi-second RS-485 transaction holding the
+// bus lock. Lock order is always bus_lock() -> settings_lock(), never the
+// reverse.
+static SemaphoreHandle_t settings_lock() {
+  static SemaphoreHandle_t lock = xSemaphoreCreateRecursiveMutex();
+  return lock;
+}
+
+class SettingsLock {
+public:
+  SettingsLock() { xSemaphoreTakeRecursive(settings_lock(), portMAX_DELAY); }
+  ~SettingsLock() { xSemaphoreGiveRecursive(settings_lock()); }
+  SettingsLock(const SettingsLock&) = delete;
+  SettingsLock& operator=(const SettingsLock&) = delete;
+};
+
+#define NO_ACTIVE_BUS 0xFF
+
+static uint8_t active_bus_id = NO_ACTIVE_BUS;  // Which bus currently owns RS485_UART_NUM
+static bool uart_installed = false;            // Whether the UART driver is currently installed
 
 
 // Constructor - initialize bus with ID and set pin assignments
 Bus::Bus(uint8_t id) : bus_id(id), bus_state(BUS_OFFLINE), 
                        warm_on_at(0), active_seconds_last_save_at(0),
                        last_polled(0),
+                       power_request(BUS_POWER_REQ_NONE), repeller_total(0),
                        red(0x03), green(0xd5), blue(0xff), brightness(100), cartridge_active_seconds(0),
                        cartridge_warn_at_seconds(349200), auto_shut_off_after_seconds(18000) {
   // Set pin assignments based on bus ID
@@ -62,6 +107,8 @@ Bus::Bus(uint8_t id) : bus_id(id), bus_state(BUS_OFFLINE),
 
 // Initialize the bus (set the initial state for the pins)
 void Bus::init() {
+  BusLock lock;
+
   if (dir_pin == -1) {
     ESP_LOGE(TAG, "Bus %d: Invalid pin configuration", bus_id);
     bus_state = BUS_ERROR;
@@ -83,11 +130,72 @@ void Bus::init() {
   load_settings();
 }
 
+// Give this bus ownership of the shared RS-485 UART. Does not touch bus power.
+// Tracks driver installation separately from ownership: powerdown() releases
+// ownership, and the previous code then skipped the delete and re-installed on
+// top of a live driver, which fails with ESP_ERR_INVALID_STATE.
+bool Bus::configure_uart() {
+  if (tx_pin == -1 || rx_pin == -1 || dir_pin == -1) {
+    ESP_LOGE(TAG, "Bus %d: Invalid pin configuration", bus_id);
+    bus_state = BUS_ERROR;
+    return false;
+  }
+
+  if (active_bus_id == bus_id && uart_installed) {
+    return true;  // Already ours
+  }
+
+  if (uart_installed) {
+    uart_driver_delete(RS485_UART_NUM);
+    uart_installed = false;
+    active_bus_id = NO_ACTIVE_BUS;
+  }
+
+  uart_config_t uart_config = {
+    .baud_rate = RS485_BAUD_RATE,
+    .data_bits = UART_DATA_8_BITS,
+    .parity = UART_PARITY_DISABLE,
+    .stop_bits = UART_STOP_BITS_1,
+    .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+    .source_clk = UART_SCLK_DEFAULT,
+  };
+
+  esp_err_t err = uart_param_config(RS485_UART_NUM, &uart_config);
+  if (err == ESP_OK) {
+    err = uart_set_pin(RS485_UART_NUM, tx_pin, rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+  }
+  if (err == ESP_OK) {
+    err = uart_driver_install(RS485_UART_NUM, RS485_BUF_SIZE, 0, 0, NULL, 0);
+  }
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Bus %d: UART setup failed (%s)", bus_id, esp_err_to_name(err));
+    bus_state = BUS_ERROR;
+    return false;
+  }
+
+  uart_installed = true;
+  active_bus_id = bus_id;
+  uart_flush_input(RS485_UART_NUM);  // Clear any existing data
+
+  ESP_LOGI(TAG, "Bus %d: took ownership of the RS-485 UART", bus_id);
+  return true;
+}
+
 // Activate the bus (Power on the bus (if unpowered) and configure UART)
 void Bus::activate() {
+  BusLock lock;
+
   if(bus_state == BUS_ERROR) {
-    powerdown();  // Ensure we power down if in error state
+    // Deliberately not calling powerdown() here - it resets bus_state to
+    // BUS_OFFLINE, which made a permanently misconfigured bus look recoverable
+    // and let the next activate() drive GPIO -1.
     ESP_LOGE(TAG, "Bus %d: Cannot activate bus in error state", bus_id);
+    return;
+  }
+
+  if(dir_pin == -1) {
+    ESP_LOGE(TAG, "Bus %d: Invalid pin configuration", bus_id);
+    bus_state = BUS_ERROR;
     return;
   }
 
@@ -101,41 +209,14 @@ void Bus::activate() {
     bus_state = BUS_POWERED;
   }
 
-  // Initialize UART for RS-485 communication
-  if(active_bus_id != bus_id) {
-    if (bus_id == 0 || (bus_id == 1 && tx_pin != -1)) {
-      // If another bus was using the UART, uninstall the driver first
-      if (active_bus_id != (uint8_t)-1) {
-        uart_driver_delete(RS485_UART_NUM);
-      }
-
-      uart_config_t uart_config = {
-        .baud_rate = RS485_BAUD_RATE,
-        .data_bits = UART_DATA_8_BITS,
-        .parity = UART_PARITY_DISABLE,
-        .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-        .source_clk = UART_SCLK_DEFAULT,
-      };
-      uart_param_config(RS485_UART_NUM, &uart_config);
-      uart_set_pin(RS485_UART_NUM, tx_pin, rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-      uart_driver_install(RS485_UART_NUM, RS485_BUF_SIZE, 0, 0, NULL, 0);
-
-      // Clear any existing data
-      uart_flush_input(RS485_UART_NUM);
-
-      ESP_LOGI(TAG, "Bus %d initialized successfully", bus_id);
-      active_bus_id = bus_id;  // Set this bus as the active one
-    } else {
-      ESP_LOGE(TAG, "Bus %d: Failed to initialize", bus_id);
-      bus_state = BUS_ERROR;
-    }
-  }
+  configure_uart();
 }
 
 // Power down (deactivate) the bus
 // NOTE - Does not send the powerdown command to the repellers first, so if there is no power pin, the repellers will keep running.
 void Bus::powerdown() {
+  BusLock lock;
+
   if(bus_state != BUS_OFFLINE) {
     if(pow_pin != -1) {
       gpio_set_level((gpio_num_t)pow_pin, 0);  // Power off the bus
@@ -143,22 +224,43 @@ void Bus::powerdown() {
     } else {
       ESP_LOGI(TAG, "Bus %d: powerdown: no power pin", bus_id);
     }
-    bus_state = BUS_OFFLINE;
+    if(bus_state != BUS_ERROR) {
+      bus_state = BUS_OFFLINE;  // A configuration error is not cleared by powering down
+    }
   } else {
     ESP_LOGI(TAG, "Bus %d: powerdown: bus already offline", bus_id);
   }
 
+  warm_on_at = 0;  // The auto shut-off window restarts at the next warm-up
+
   if(active_bus_id == bus_id) {
-    active_bus_id = -1;
+    if(uart_installed) {
+      uart_driver_delete(RS485_UART_NUM);
+      uart_installed = false;
+    }
+    active_bus_id = NO_ACTIVE_BUS;
   }
 }
 
 // Transmit packet on this bus
 void Bus::transmit(Packet *packet) {
-  activate();  // Ensure the bus is active before transmitting
+  BusLock lock;
 
   if (!packet) {
     ESP_LOGE(TAG, "Bus %d: Cannot transmit null packet", bus_id);
+    return;
+  }
+
+  // Transmitting must not power the bus up as a side effect. This used to call
+  // activate(), so a colour or brightness request against an idle bus silently
+  // switched the rail on and left it energised with nothing running on it.
+  // Callers that want the bus live call activate()/powerOn() explicitly.
+  if (bus_state == BUS_OFFLINE || bus_state == BUS_ERROR) {
+    ESP_LOGW(TAG, "Bus %d: Not transmitting, bus is %s", bus_id, getStateString());
+    return;
+  }
+
+  if (!configure_uart()) {
     return;
   }
 
@@ -191,17 +293,29 @@ bool Bus::receive_and_print(const char* expected_type, uint16_t timeout_ms) {
 
 // Packet-based receive function
 bool Bus::receive_packet(Packet& packet, uint16_t timeout_ms) {
-  static uint8_t rx_buffer[11];
-  static size_t buffer_index = 0;
-  static uint32_t last_byte_time = 0;
-  static bool packet_in_progress = false;
+  BusLock lock;
+
+  // Per-call state. These were function statics, which meant a partial frame
+  // left behind by one bus could be spliced onto the next bus's packet - and
+  // any fragment older than PACKET_TIMEOUT_MS is discarded anyway, so there was
+  // nothing to carry across calls.
+  uint8_t rx_buffer[11];
+  size_t buffer_index = 0;
+  uint32_t last_byte_time = 0;
+  bool packet_in_progress = false;
 
   const uint32_t PACKET_TIMEOUT_MS = 8;  // Same as sniffer
   uint32_t start_time = millis_now();
   uint32_t current_time;
 
-  // Ensure this bus is active and we're in receive mode
-  activate();
+  if (bus_state == BUS_OFFLINE || bus_state == BUS_ERROR) {
+    return false;
+  }
+
+  // Ensure this bus owns the UART and we're in receive mode
+  if (!configure_uart()) {
+    return false;
+  }
   gpio_set_level((gpio_num_t)dir_pin, 0);
 
   while (true) {
@@ -295,8 +409,10 @@ bool Bus::receive_packet(Packet& packet, uint16_t timeout_ms) {
       return false;
     }
     
-    // Small delay to prevent overwhelming the processor
-    vTaskDelay(pdMS_TO_TICKS(100));
+    // Small delay to prevent overwhelming the processor. Kept well under
+    // PACKET_TIMEOUT_MS so short timeouts (discovery uses 100ms) still get a
+    // useful number of polling passes.
+    vTaskDelay(pdMS_TO_TICKS(5));
   }
 }
 
@@ -419,6 +535,7 @@ Repeller* Bus::get_or_create_repeller(uint8_t address) {
   
   // Create new repeller and add to list
   repellers.emplace_back(address);
+  repeller_total.store(repellers.size(), std::memory_order_relaxed);
   return &repellers.back();
 }
 
@@ -436,8 +553,16 @@ uint8_t Bus::find_next_address() {
 
 // Discover all repellers on the bus by sending broadcast tx_startup commands
 void Bus::discover_repellers() {
+  BusLock lock;
   ESP_LOGI(TAG, "Bus %d: Discovering repellers on the bus...", bus_id);
-  
+
+  // Anything already known starts as OFFLINE and is only brought back by an
+  // actual response. Previously a device that had been unplugged was carried
+  // forward as if it were still present and got warmed up along with the rest.
+  for (auto& repeller : repellers) {
+    repeller.state = OFFLINE;
+  }
+
   Packet received_packet;
   int consecutive_no_response = 0;
   int total_discovered = 0;
@@ -527,24 +652,29 @@ void Bus::retrieve_serial(Repeller* repeller) {
   
   if (receive_packet(response_packet, 1000)) {
     if (response_packet.identifyPacket() == RX_SER_NO_1) {
-      // Extract serial number part 1
+      // Extract serial number part 1. The payload is NUL padded, so stop at the
+      // first non-printable byte rather than substituting a placeholder.
       char serial_part1[9];
-      for (int i = 0; i < 8; i++) {
-        serial_part1[i] = (response_packet.data[i + 3] >= 32 && response_packet.data[i + 3] <= 126) ? response_packet.data[i + 3] : '.';
+      int len1 = 0;
+      while (len1 < 8 && response_packet.data[len1 + 3] >= 32 && response_packet.data[len1 + 3] <= 126) {
+        serial_part1[len1] = (char)response_packet.data[len1 + 3];
+        len1++;
       }
-      serial_part1[8] = '\0'; // Null-terminate the string
+      serial_part1[len1] = '\0'; // Null-terminate the string
       
       // Send tx_ser_no_2 and wait for response
       send_tx_ser_no_2(repeller->address);
       
       if (receive_packet(response_packet, 1000)) {
         if (response_packet.identifyPacket() == RX_SER_NO_2) {
-          // Extract serial number part 2
+          // Extract serial number part 2 (same NUL padded layout as part 1)
           char serial_part2[9];
-          for (int i = 0; i < 8; i++) {
-            serial_part2[i] = (response_packet.data[i + 3] >= 32 && response_packet.data[i + 3] <= 126) ? response_packet.data[i + 3] : '.';
+          int len2 = 0;
+          while (len2 < 8 && response_packet.data[len2 + 3] >= 32 && response_packet.data[len2 + 3] <= 126) {
+            serial_part2[len2] = (char)response_packet.data[len2 + 3];
+            len2++;
           }
-          serial_part2[8] = '\0'; // Null-terminate the string
+          serial_part2[len2] = '\0'; // Null-terminate the string
           
           // Combine both parts into the repeller's serial
           repeller->setSerial(serial_part1, serial_part2);
@@ -699,9 +829,13 @@ void Bus::send_activate_at_end_of_warmup(Repeller *repeller) {
 }
 
 void Bus::retrieve_serial_for_all() {
+  BusLock lock;
   ESP_LOGI(TAG, "Bus %d: Retrieving serial numbers for all discovered repellers...", bus_id);
   
   for (auto& repeller : repellers) {
+    if (repeller.state == OFFLINE) {
+      continue;  // Did not answer discovery
+    }
     if(strlen(repeller.serial) > 0) {
       // We only need to retrieve serial once
       ESP_LOGI(TAG, "Bus %d: Repeller at address 0x%02X already has serial: %s", bus_id, repeller.address, repeller.serial);
@@ -716,7 +850,21 @@ void Bus::retrieve_serial_for_all() {
 }
 
 void Bus::warm_up_all() {
+  BusLock lock;
+
   ESP_LOGI(TAG, "Bus %d: Warming up all repellers...", bus_id);
+
+  size_t present = 0;
+  for (const auto& repeller : repellers) {
+    if (repeller.state != OFFLINE) present++;
+  }
+
+  if (present == 0) {
+    // Without this the bus parked in BUS_WARMING_UP with nothing on it and sat
+    // there until the auto shut-off fired.
+    ESP_LOGW(TAG, "Bus %d: No repellers responded - nothing to warm up", bus_id);
+    return;
+  }
 
   send_tx_powerup();  // This is the command that actually powers up the repellers
 
@@ -725,6 +873,7 @@ void Bus::warm_up_all() {
   bus_state = BUS_WARMING_UP;
   
   for (auto& repeller : repellers) {
+    if (repeller.state == OFFLINE) continue;
     repeller.state = WARMING_UP;
     repeller.turned_on_at = esp_timer_get_time();  // Record the time when the repeller was turned on
     ESP_LOGI(TAG, "Bus %d: Sending warmup instruction to repeller at address 0x%02X...", bus_id, repeller.address);
@@ -734,6 +883,7 @@ void Bus::warm_up_all() {
   vTaskDelay(pdMS_TO_TICKS(4000));  // Wait for 4 seconds to allow warmup to start
 
   for (auto& repeller : repellers) {
+    if (repeller.state == OFFLINE) continue;
     ESP_LOGI(TAG, "Bus %d: Sending LED parameters to repeller at address 0x%02X...", bus_id, repeller.address);
     send_startup_led_params(&repeller);
   }
@@ -742,11 +892,14 @@ void Bus::warm_up_all() {
 }
 
 void Bus::end_warm_up_all() {
+  BusLock lock;
+
   ESP_LOGI(TAG, "Bus %d: Activating all repellers (ending warm up)...", bus_id);
 
   send_tx_powerup();  // This is the command that actually powers up the repellers
   
   for (auto& repeller : repellers) {
+    if (repeller.state == OFFLINE) continue;
     repeller.state = ACTIVE;
     ESP_LOGI(TAG, "Bus %d: Activating (ending warm up) repeller at address 0x%02X...", bus_id, repeller.address);
     send_activate_at_end_of_warmup(&repeller);
@@ -763,8 +916,16 @@ bool Bus::heartbeat_poll() {
   // If the response is RX_ACTIVE, the state is ACTIVE
   // If no response is received, the state is OFFLINE. We'll need to add handling for this later. 
 
+  BusLock lock;
+
   ESP_LOGI(TAG, "Bus %d: Starting heartbeat poll...", bus_id);
-  
+
+  if (repellers.empty()) {
+    // "Nothing warming up" is not the same as "everything is running"
+    ESP_LOGW(TAG, "Bus %d: Heartbeat poll with no known repellers", bus_id);
+    return false;
+  }
+
   for (auto& repeller : repellers) {
     ESP_LOGI(TAG, "Bus %d: Sending heartbeat to repeller 0x%02X...", bus_id, repeller.address);
     
@@ -812,13 +973,10 @@ bool Bus::heartbeat_poll() {
   // Once this is done, we'll need to handle actually setting the controllers to active when any_warmed_up is true and any_warming_up is false. We'll do this later.
   bool any_warming_up = false;
   bool any_warmed_up = false;
-  bool any_active = false;
-  
+
   for (const auto& repeller : repellers) {
     if (repeller.state == WARMING_UP) {
       any_warming_up = true;
-    } else if (repeller.state == ACTIVE) {
-      any_active = true;
     } else if (repeller.state == WARMED_UP) {
       any_warmed_up = true;
     }
@@ -839,20 +997,43 @@ bool Bus::heartbeat_poll() {
   return false; 
 }
 
+// Called every main-loop pass. This is the only place long RS-485 transactions
+// are started, which keeps them off the httpd task.
 void Bus::poll() {
-  bool heartbeat = false;  // Track if we successfully polled the heartbeat
+  // Power on/off requested by another task. Runs before the lock is taken for
+  // the periodic work below because it acquires the lock itself.
+  service_power_request();
+
+  BusLock lock;
+
+  if (bus_state != BUS_WARMING_UP && bus_state != BUS_REPELLING) {
+    return;  // Nothing to poll on an idle bus
+  }
+
   uint32_t current_time = millis_now();
-    
+
   if (current_time - last_polled > BUS_POLLING_INTERVAL_MS) {
-    ESP_LOGI(TAG, "Sending periodic heartbeat...");
-    heartbeat = heartbeat_poll();  // Poll the heartbeat status of all repellers on the bus
+    ESP_LOGI(TAG, "Bus %d: Sending periodic heartbeat...", bus_id);
+    heartbeat_poll();  // Poll the heartbeat status of all repellers on the bus
     last_polled = current_time;
   }
 
+  // Flush the cartridge runtime counter so an unexpected reset does not discard
+  // the whole running session.
+  if ((esp_timer_get_time() - active_seconds_last_save_at) >= CARTRIDGE_SAVE_INTERVAL_US) {
+    save_active_seconds();
+  }
+
+  if (past_automatic_shutoff()) {
+    ESP_LOGI(TAG, "Bus %d: auto shut-off reached", bus_id);
+    powerOff();
+  }
 }
 
 
 void Bus::change_led_brightness(uint8_t brightness_pct) {
+  BusLock lock;
+
   // This function broadcasts the LED brightness change to all devices
   ESP_LOGI(TAG, "Bus %d: Changing LED brightness to %d%% for all devices...", bus_id, brightness_pct);
 
@@ -883,6 +1064,8 @@ void Bus::change_led_brightness(uint8_t brightness_pct) {
 }
 
 void Bus::change_led_color(uint8_t red, uint8_t green, uint8_t blue) {
+  BusLock lock;
+
   // This function broadcasts the LED color change to all devices
   ESP_LOGI(TAG, "Bus %d: Changing LED color to R:%d G:%d B:%d for all devices...", bus_id, red, green, blue);
 
@@ -898,6 +1081,8 @@ void Bus::change_led_color(uint8_t red, uint8_t green, uint8_t blue) {
 }
 
 void Bus::shutdown_all() {
+  BusLock lock;
+
   ESP_LOGI(TAG, "Bus %d: Shutting down all repellers...", bus_id);
   
   // 1. Send send_tx_powerdown
@@ -918,6 +1103,8 @@ void Bus::shutdown_all() {
 
 // Load settings from filesystem
 void Bus::load_settings() {
+  SettingsLock lock;
+
   char filename[32];
   snprintf(filename, sizeof(filename), "/littlefs/bus%d_settings.dat", bus_id);
 
@@ -933,23 +1120,46 @@ void Bus::load_settings() {
     return;
   }
 
-  // Read settings in order
-  fread(&red, sizeof(uint8_t), 1, file);
-  fread(&green, sizeof(uint8_t), 1, file);
-  fread(&blue, sizeof(uint8_t), 1, file);
-  fread(&brightness, sizeof(uint8_t), 1, file);
+  // Read settings in order. Read into a scratch copy first: a short or corrupt
+  // file used to leave the live settings as a mix of defaults and garbage.
+  struct {
+    uint8_t red, green, blue, brightness;
+    uint32_t cartridge_active_seconds;
+    uint32_t cartridge_warn_at_seconds;
+    uint16_t auto_shut_off_after_seconds;
+  } loaded;
 
-  fread(&cartridge_active_seconds, sizeof(uint32_t), 1, file);
-  fread(&cartridge_warn_at_seconds, sizeof(uint32_t), 1, file);
-  fread(&auto_shut_off_after_seconds, sizeof(uint16_t), 1, file);
+  size_t ok = 0;
+  ok += fread(&loaded.red, sizeof(uint8_t), 1, file);
+  ok += fread(&loaded.green, sizeof(uint8_t), 1, file);
+  ok += fread(&loaded.blue, sizeof(uint8_t), 1, file);
+  ok += fread(&loaded.brightness, sizeof(uint8_t), 1, file);
+  ok += fread(&loaded.cartridge_active_seconds, sizeof(uint32_t), 1, file);
+  ok += fread(&loaded.cartridge_warn_at_seconds, sizeof(uint32_t), 1, file);
+  ok += fread(&loaded.auto_shut_off_after_seconds, sizeof(uint16_t), 1, file);
+  fclose(file);
+
+  if (ok != 7) {
+    ESP_LOGW(TAG, "Bus %d: Settings file is short or unreadable, using defaults", bus_id);
+    return;
+  }
+
+  red = loaded.red;
+  green = loaded.green;
+  blue = loaded.blue;
+  brightness = loaded.brightness;
+  cartridge_active_seconds = loaded.cartridge_active_seconds;
+  cartridge_warn_at_seconds = loaded.cartridge_warn_at_seconds;
+  auto_shut_off_after_seconds = loaded.auto_shut_off_after_seconds;
   if (auto_shut_off_after_seconds > 57600) auto_shut_off_after_seconds = 18000; // Validate range
 
-  fclose(file);
   ESP_LOGI(TAG, "Bus %d: Settings loaded from filesystem", bus_id);
 }
 
 // Save settings to filesystem
 void Bus::save_settings() {
+  SettingsLock lock;
+
   char filename[32];
   snprintf(filename, sizeof(filename), "/littlefs/bus%d_settings.dat", bus_id);
 
@@ -974,6 +1184,8 @@ void Bus::save_settings() {
 
 // Settings interface methods
 void Bus::setRGB(uint8_t new_red, uint8_t new_green, uint8_t new_blue) {
+  SettingsLock lock;
+
   if(new_red != red || new_green != green || new_blue != blue) {
     red = new_red;
     green = new_green;
@@ -986,6 +1198,8 @@ void Bus::setRGB(uint8_t new_red, uint8_t new_green, uint8_t new_blue) {
 }
 
 void Bus::setBrightness(uint8_t new_brightness) {
+  SettingsLock lock;
+
   if(brightness != new_brightness) {
     brightness = new_brightness;
     save_settings();
@@ -996,12 +1210,16 @@ void Bus::setBrightness(uint8_t new_brightness) {
 }
 
 void Bus::resetCartridge() {
+  SettingsLock lock;
+
   cartridge_active_seconds = 0;
   save_settings();
   ESP_LOGI(TAG, "Bus %d: Cartridge reset, active seconds set to 0", bus_id);
 }
 
 void Bus::setCartridgeWarnAtSeconds(uint32_t seconds) {
+  SettingsLock lock;
+
   if(cartridge_warn_at_seconds != seconds) {
     cartridge_warn_at_seconds = seconds;
     save_settings();
@@ -1012,6 +1230,8 @@ void Bus::setCartridgeWarnAtSeconds(uint32_t seconds) {
 }
 
 void Bus::setAutoShutOffAfterSeconds(uint16_t seconds) {
+  SettingsLock lock;
+
   if (seconds > 57600) {
     ESP_LOGI(TAG, "Bus %d: Invalid auto shut-off value %d, must be 0-57600", bus_id, seconds);
     return;
@@ -1028,6 +1248,8 @@ void Bus::setAutoShutOffAfterSeconds(uint16_t seconds) {
 
 // Helper conversion methods
 uint8_t Bus::repeller_brightness() {
+  SettingsLock lock;
+
   // Convert brightness (0-255) to repeller brightness (0-100)
   return (uint8_t)round((brightness * 100.0) / 255.0);
 }
@@ -1045,6 +1267,8 @@ uint8_t Bus::repeller_blue() {
 }
 
 void Bus::save_active_seconds() {
+  SettingsLock lock;
+
   if (bus_state == BUS_WARMING_UP || bus_state == BUS_REPELLING) {
     uint64_t current_time = esp_timer_get_time();
     uint64_t elapsed_microseconds = current_time - active_seconds_last_save_at;
@@ -1074,7 +1298,35 @@ bool Bus::past_automatic_shutoff() {
   return elapsed_seconds >= auto_shut_off_after_seconds;
 }
 
+void Bus::requestPower(bool on) {
+  // Deliberately lock-free: this runs on the httpd task and must return at once.
+  // The main loop picks the request up in poll() within a few milliseconds.
+  power_request.store(on ? BUS_POWER_REQ_ON : BUS_POWER_REQ_OFF, std::memory_order_relaxed);
+  ESP_LOGI(TAG, "Bus %d: queued power %s request", bus_id, on ? "on" : "off");
+}
+
+void Bus::service_power_request() {
+  uint8_t req = power_request.load(std::memory_order_relaxed);
+  if (req == BUS_POWER_REQ_NONE) {
+    return;
+  }
+
+  if (req == BUS_POWER_REQ_ON) {
+    powerOn();
+  } else {
+    powerOff();
+  }
+
+  // Only clear the request if it is still the one we just serviced. A reversing
+  // request that arrived while we were working stays queued for the next pass.
+  uint8_t expected = req;
+  power_request.compare_exchange_strong(expected, (uint8_t)BUS_POWER_REQ_NONE,
+                                        std::memory_order_relaxed);
+}
+
 void Bus::powerOn() {
+  BusLock lock;
+
   ESP_LOGI(TAG, "Bus %d: Power on command received", bus_id);
   
   // Activate the bus if it's offline
@@ -1087,12 +1339,21 @@ void Bus::powerOn() {
     discover_repellers();
     retrieve_serial_for_all();
     warm_up_all();
+
+    if (bus_state == BUS_POWERED) {
+      // warm_up_all() found nothing to start - don't leave the rail energised
+      ESP_LOGW(TAG, "Bus %d: Power on found no repellers, powering back down", bus_id);
+      powerdown();
+      return;
+    }
   }
   
   ESP_LOGI(TAG, "Bus %d: Power on sequence initiated", bus_id);
 }
 
 void Bus::powerOff() {
+  BusLock lock;
+
   ESP_LOGI(TAG, "Bus %d: Power off command received", bus_id);
   
   // Save any remaining active seconds before shutdown
@@ -1106,6 +1367,8 @@ void Bus::powerOff() {
 
 // Cartridge monitoring methods
 uint16_t Bus::get_cartridge_runtime_hours() {
+  SettingsLock lock;
+
   // Update active seconds if currently running
   if (bus_state == BUS_WARMING_UP || bus_state == BUS_REPELLING) {
     uint64_t current_time = esp_timer_get_time();
@@ -1119,6 +1382,8 @@ uint16_t Bus::get_cartridge_runtime_hours() {
 }
 
 uint8_t Bus::get_cartridge_percent_left() {
+  SettingsLock lock;
+
   uint32_t total_active_seconds = cartridge_active_seconds;
   
   // Add current session time if running

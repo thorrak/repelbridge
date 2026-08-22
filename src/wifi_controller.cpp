@@ -32,12 +32,12 @@ int WiFiRepellerDevice::writeBusStatusJson(char* buf, size_t buf_size) {
 
     doc["bus_id"] = bus_id;
     doc["state"] = controlled_bus->getStateString();
-    doc["powered"] = (controlled_bus->getState() != BUS_OFFLINE);
+    doc["powered"] = controlled_bus->isOn();
     doc["brightness"] = controlled_bus->get_brightness();
     doc["color"]["red"] = controlled_bus->repeller_red();
     doc["color"]["green"] = controlled_bus->repeller_green();
     doc["color"]["blue"] = controlled_bus->repeller_blue();
-    doc["repeller_count"] = controlled_bus->getRepellers().size();
+    doc["repeller_count"] = controlled_bus->repeller_count();
 
     return serializeJson(doc, buf, buf_size);
 }
@@ -130,13 +130,13 @@ static esp_err_t handle_bus_power(httpd_req_t *req) {
         return send_error_response(req, 400, "Missing state parameter");
 
     bool power_on = doc["state"].as<bool>();
-    if (power_on) {
-        device->getBus()->powerOn();
-        ESP_LOGI(TAG, "Bus %d powered ON via WiFi API", bus_id);
-    } else {
-        device->getBus()->powerOff();
-        ESP_LOGI(TAG, "Bus %d powered OFF via WiFi API", bus_id);
-    }
+
+    // Queue the change for the main loop rather than running it here: a power-on
+    // is a multi-second discovery and warm-up sequence, and blocking the httpd
+    // task for that long times the client out and stalls every other request.
+    // The status this returns already reflects the queued request.
+    device->getBus()->requestPower(power_on);
+    ESP_LOGI(TAG, "Bus %d power %s requested via WiFi API", bus_id, power_on ? "ON" : "OFF");
 
     char buf[256];
     device->writeBusStatusJson(buf, sizeof(buf));
@@ -324,9 +324,9 @@ static esp_err_t handle_system_status(httpd_req_t *req) {
     doc["uptime_ms"] = millis_now();
 
     doc["bus0"]["state"] = bus0.getStateString();
-    doc["bus0"]["repeller_count"] = bus0.getRepellers().size();
+    doc["bus0"]["repeller_count"] = bus0.repeller_count();
     doc["bus1"]["state"] = bus1.getStateString();
-    doc["bus1"]["repeller_count"] = bus1.getRepellers().size();
+    doc["bus1"]["repeller_count"] = bus1.repeller_count();
 
     // Include WiFi connection status from esp_wifi_config
     wifi_status_t wifi_status;
@@ -495,20 +495,9 @@ void wifi_controller_setup() {
 }
 
 void wifi_controller_loop() {
-    // Update cartridge monitoring for active buses
-    if (bus0.getState() == BUS_WARMING_UP || bus0.getState() == BUS_REPELLING) {
-        bus0.poll();
-        if (bus0.past_automatic_shutoff()) {
-            ESP_LOGI(TAG, "Bus 0 auto-shutoff triggered");
-            bus0.powerOff();
-        }
-    }
-
-    if (bus1.getState() == BUS_WARMING_UP || bus1.getState() == BUS_REPELLING) {
-        bus1.poll();
-        if (bus1.past_automatic_shutoff()) {
-            ESP_LOGI(TAG, "Bus 1 auto-shutoff triggered");
-            bus1.powerOff();
-        }
-    }
+    // poll() runs any power change queued by an HTTP handler, then the periodic
+    // heartbeat, cartridge flush and auto shut-off check. It returns immediately
+    // when the bus is idle, so it is cheap to call unconditionally.
+    bus0.poll();
+    bus1.poll();
 }

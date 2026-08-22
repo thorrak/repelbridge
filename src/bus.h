@@ -1,6 +1,7 @@
 #ifndef BUS_H
 #define BUS_H
 
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <cmath>
@@ -9,6 +10,15 @@
 #include "repeller.h"
 
 #define BUS_POLLING_INTERVAL_MS 15000  // Interval between heartbeat polls
+
+// A power change requested from another task (an HTTP handler) and executed by
+// the main loop. Powering a bus up is a multi-second RS-485 transaction, so it
+// must not run on the caller's thread.
+enum BusPowerRequest : uint8_t {
+  BUS_POWER_REQ_NONE = 0,
+  BUS_POWER_REQ_ON,
+  BUS_POWER_REQ_OFF
+};
 
 // Bus state enumeration
 enum BusState {
@@ -35,7 +45,20 @@ private:
   uint64_t warm_on_at;  // Timestamp when the bus was last warmed up (for tracking auto-off settings)
   uint64_t active_seconds_last_save_at;  // Timestamp of the last cartridge_active_seconds increment
 
-  uint64_t last_polled;  // Timestamp at which the bus was last polled for repeller status
+  uint32_t last_polled;  // millis() timestamp at which the bus was last polled for repeller status
+
+  // Set from any task, consumed by the main loop in poll()
+  std::atomic<uint8_t> power_request;
+
+  // Mirrors repellers.size() so status readers never have to walk (or lock) the
+  // list while the bus task is mutating it.
+  std::atomic<uint32_t> repeller_total;
+
+  // Give this bus ownership of the shared RS-485 UART. Does not touch bus power.
+  bool configure_uart();
+
+  // Run any queued power request. Called by poll() on the main loop.
+  void service_power_request();
   
   // Settings fields (saved to filesystem)
   uint8_t red;                         // 0-255, default 0x03
@@ -124,6 +147,10 @@ public:
 
   void powerOn();
   void powerOff();
+
+  // Queue a power change for the main loop and return immediately. This is what
+  // HTTP handlers should call - powerOn()/powerOff() block for many seconds.
+  void requestPower(bool on);
   
   // Cartridge monitoring methods
   uint16_t get_cartridge_runtime_hours();
@@ -144,10 +171,27 @@ public:
   // Getters
   uint8_t getBusId() const { return bus_id; }
   BusState getState() const { return bus_state; }
-  const std::list<Repeller>& getRepellers() const { return repellers; }
-  
+
+  // Lock-free repeller count. The old accessor handed out a reference to a list
+  // the bus task mutates, so callers on other tasks read it unsynchronised.
+  uint32_t repeller_count() const { return repeller_total.load(std::memory_order_relaxed); }
+
+  // True when the bus is running or has a queued request to start, so a client
+  // that has just asked for power sees its request reflected straight away.
+  bool isOn() const {
+    uint8_t req = power_request.load(std::memory_order_relaxed);
+    if (req == BUS_POWER_REQ_ON) return true;
+    if (req == BUS_POWER_REQ_OFF) return false;
+    return bus_state != BUS_OFFLINE;
+  }
+
   // Method to get state as string for debugging
   const char* getStateString() const {
+    switch(power_request.load(std::memory_order_relaxed)) {
+      case BUS_POWER_REQ_ON: return "BUS_STARTING";
+      case BUS_POWER_REQ_OFF: return "BUS_STOPPING";
+      default: break;
+    }
     switch(bus_state) {
       case BUS_OFFLINE: return "BUS_OFFLINE";
       case BUS_POWERED: return "BUS_POWERED";

@@ -6,6 +6,7 @@
 #include "driver/uart.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <cinttypes>
 
 static const char* TAG = "sniffer";
 
@@ -48,7 +49,7 @@ static void processPacket() {
       for(size_t i = 0; i < buffer_index; i++) {
         snprintf(&hex_buf[i * 3], 4, "%02X ", rx_buffer[i]);
       }
-      ESP_LOGI(TAG, "[%08lu] RX: %s(PARTIAL) [%d bytes]", millis_now(), hex_buf, buffer_index);
+      ESP_LOGI(TAG, "[%08" PRIu32 "] RX: %s(PARTIAL) [%u bytes]", millis_now(), hex_buf, (unsigned)buffer_index);
     }
     buffer_index = 0;
   }

@@ -4,7 +4,7 @@
 #include "esp_timer.h"
 
 static const char* TAG = "packet";
-static char packet_name_buffer[32];
+static char packet_name_buffer[48];  // Longest name is "tx_led_brightness_startup:XX (NNN)" = 34 bytes
 
 bool rest_zero(const uint8_t* data, uint8_t start_index) {
   for(uint8_t i = start_index; i<11; i++)

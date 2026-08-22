@@ -15,9 +15,11 @@
 
 static const char* TAG = "main";
 
+#ifdef MODE_CONTROLLER
 static uint32_t millis_now() {
   return (uint32_t)(esp_timer_get_time() / 1000);
 }
+#endif
 
 // Global bus objects
 Bus bus0(0);

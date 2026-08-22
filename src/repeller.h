@@ -18,18 +18,18 @@ enum RepellerState {
 class Repeller {
 public:
   uint8_t address;
-  char serial[16];
+  char serial[17];  // Two 8-character halves plus the terminating NUL
   RepellerState state;
   uint64_t turned_on_at;
   
   // Constructor - requires address, initializes serial to blank and state to inactive
-  Repeller(uint8_t addr) : address(addr), state(INACTIVE) {
+  Repeller(uint8_t addr) : address(addr), state(INACTIVE), turned_on_at(0) {
     serial[0] = '\0';  // Initialize serial as empty string
   }
   
   // Method to set serial number from two parts
   void setSerial(const char* part1, const char* part2) {
-    snprintf(serial, sizeof(serial), "%s%s", part1, part2);
+    snprintf(serial, sizeof(serial), "%.8s%.8s", part1, part2);
   }
   
   // Method to get state as string for debugging

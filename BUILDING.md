@@ -61,7 +61,7 @@ The PCB also adds two screw terminals that could be used in the future to add bu
 
 ### Microcontroller
 
-The RepelBridge is controlled via a microcontroller which serves as the "brains" of your build. The PCB design is intended to work with one of two options:
+The RepelBridge is controlled via a microcontroller which serves as the "brains" of your build. The PCB design is intended to work with:
 
 - [Xiao ESP32-S3](https://www.seeedstudio.com/Seeed-Studio-XIAO-ESP32S3-Pre-Soldered-p-6334.html)
 

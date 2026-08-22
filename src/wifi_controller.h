@@ -20,8 +20,8 @@ void wifi_controller_loop();
 // WiFi device wrapper class for bus control
 class WiFiRepellerDevice {
 private:
-    Bus* controlled_bus;
     uint8_t bus_id;
+    Bus* controlled_bus;
 
 public:
     WiFiRepellerDevice(uint8_t id, Bus* bus);

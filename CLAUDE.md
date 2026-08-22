@@ -214,7 +214,7 @@ void Bus::setRGB(uint8_t red, uint8_t green, uint8_t blue);
 - **Monitor Speed**: 115200
 - **Filesystem**: LittleFS (partition label `spiffs`, mounted at `/littlefs` via VFS in `main.cpp`)
 - **Partition table**: `4mb_inc_ota.csv`
-- **SDK defaults**: `sdkconfig.defaults` + `sdkconfig.wifi.defaults`
+- **SDK defaults**: `sdkconfig.defaults`
 - **Library Dependencies**:
   - `bblanchon/ArduinoJson` - REST API JSON serialization
   - `thorrak/esp_wifi_config` - WiFi provisioning (BLE / Improv Serial / captive portal web UI)
@@ -286,7 +286,7 @@ Each repeller on each bus tracks its own state:
 ## Known Issues & Limitations
 
 ### Current Limitations
-- Both buses share `UART_NUM_1`; the firmware ping-pongs ownership via `active_bus_id` in `bus.cpp` rather than running them concurrently.
+- Both buses share `UART_NUM_1`; the firmware ping-pongs ownership via `active_bus_id` in `bus.cpp` rather than running them concurrently. A recursive mutex in `bus.cpp` serialises every `Bus` entry point so the httpd task and the main loop cannot drive the UART at the same time.
 - Some RX packet patterns may need device-specific variations.
 - Color commands are sent as broadcasts (`AA 8E ...`) — addressed variants have not been verified.
 
