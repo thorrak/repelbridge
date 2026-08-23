@@ -1,6 +1,7 @@
 #include "wifi_setup.h"
 #include "esp_log.h"
 #include "esp_event.h"
+#include "esp_netif.h"
 #include "mdns.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -20,13 +21,18 @@ static const char* TAG = "wifi_setup";
 // IDF's own WIFI_EVENT / IP_EVENT handlers. Keep them short.
 
 static void on_wifi_got_ip(void *arg, esp_event_base_t base, int32_t event_id, void *data) {
-    // GOT_IP fires on every lease, including after a reconnect. mDNS is
-    // started once; a second mdns_service_add() would fail as a duplicate.
-    static bool mdns_started = false;
-    if (mdns_started) {
-        return;
-    }
+    const esp_netif_ip_info_t *ip = (const esp_netif_ip_info_t *)data;
+    ESP_LOGI(TAG, "WiFi got IP " IPSTR, IP2STR(&ip->ip));
+}
 
+// mDNS must be initialised BEFORE the STA connects. mdns_priv_netif_init()
+// only registers IP_EVENT/WIFI_EVENT handlers; the STA interface is enabled by
+// post_enable_pcb() when IP_EVENT_STA_GOT_IP arrives, and already-connected
+// interfaces are never enumerated. Starting mDNS from a got-IP callback is
+// therefore too late: the service PTR is advertised but no address record is
+// ever announced, so the hostname does not resolve (it only starts working
+// after the next reconnect delivers another got-IP).
+static void start_mdns() {
     esp_err_t err = mdns_init();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "mdns_init failed: %s", esp_err_to_name(err));
@@ -39,8 +45,7 @@ static void on_wifi_got_ip(void *arg, esp_event_base_t base, int32_t event_id, v
     snprintf(mdns_name, sizeof(mdns_name), "repel-%s", guid);
     mdns_hostname_set(mdns_name);
     mdns_service_add(NULL, WIFI_MDNS_SERVICE, "_tcp", WIFI_WEB_PORT, NULL, 0);
-    mdns_started = true;
-    ESP_LOGI(TAG, "mDNS responder started as %s.local", mdns_name);
+    ESP_LOGI(TAG, "mDNS responder registered as %s.local", mdns_name);
 }
 
 static void on_wifi_connected(void *arg, esp_event_base_t base, int32_t event_id, void *data) {
@@ -56,10 +61,21 @@ static void on_wifi_disconnected(void *arg, esp_event_base_t base, int32_t event
 // --- Public API ---
 
 httpd_handle_t wifi_setup_init() {
+    // Bring up the TCP/IP stack before httpd_start() below opens its listening
+    // socket. wifi_cfg_init() calls esp_netif_init() too, but it runs after we
+    // start the server because it needs the handle — so without this, lwIP's
+    // tcpip thread does not exist yet and the first socket() call aborts with
+    // "Invalid mbox". Re-initialising is harmless.
+    esp_err_t ret = esp_netif_init();
+    if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "Failed to initialize esp_netif: %s", esp_err_to_name(ret));
+        return NULL;
+    }
+
     // wifi_cfg_init() creates the default loop itself; creating it here first
     // is what lets the handlers below catch the events it emits during init.
     // A second create returns ESP_ERR_INVALID_STATE and is harmless.
-    esp_err_t ret = esp_event_loop_create_default();
+    ret = esp_event_loop_create_default();
     if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
         ESP_LOGE(TAG, "Failed to create default event loop: %s", esp_err_to_name(ret));
         return NULL;
@@ -81,12 +97,13 @@ httpd_handle_t wifi_setup_init() {
         return NULL;
     }
 
-    // Initialize esp_wifi_config (0.2.0). Provisioning interfaces enabled:
-    //   - SoftAP captive portal (enable_ap below)
-    //   - ESP-IDF Network Provisioning over BLE (prov_ble below, gated by
-    //     CONFIG_WIFI_CFG_ENABLE_NETWORK_PROVISIONING in sdkconfig.defaults)
-    // Improv and the library Web UI are intentionally off — RepelBridge serves
-    // its own control UI from LittleFS.
+    start_mdns();
+
+    // Initialize esp_wifi_config (0.2.0). Provisioning is the SoftAP captive
+    // portal (enable_ap below). Improv, the library Web UI and Network
+    // Provisioning over BLE are all off — see sdkconfig.defaults for why BLE
+    // and the SoftAP cannot both run. RepelBridge serves its own control UI
+    // from LittleFS.
     //
     // WIFI_CFG_DEFAULTS is mandatory as of 0.2.0: wifi_cfg_init() no longer
     // patches unset fields, so a field this struct does not mention is taken
@@ -112,6 +129,8 @@ httpd_handle_t wifi_setup_init() {
 
     wifi_config.http.httpd = http_server;
 
+    // Only consulted when CONFIG_WIFI_CFG_ENABLE_NETWORK_PROVISIONING is set,
+    // which it is not; kept so re-enabling BLE is a one-line Kconfig change.
     wifi_config.prov_ble.device_name = "RepelBridge-{id}";
     wifi_config.prov_ble.firmware_version = "1.0.0";
 

@@ -2,11 +2,6 @@ CONFIG_FREERTOS_HZ=1000
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 
-# esp_wifi_config 0.2.0 delivers its events on the default event loop, so
-# our handlers (mDNS startup) now run on the system event task rather than
-# on esp_bus's own 4 KB task. 2304 bytes is tight for mdns_init().
-CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096
-
 # WiFi controller mode: BLE system-level flags (NimBLE stack)
 CONFIG_BT_ENABLED=y
 CONFIG_BT_NIMBLE_ENABLED=y
@@ -16,11 +11,17 @@ CONFIG_BT_NIMBLE_ROLE_BROADCASTER=y
 CONFIG_BT_NIMBLE_GATT_SERVER=y
 
 # esp_wifi_config 0.2.0 — provisioning transports.
-# Captive-portal SoftAP (enable_ap in code) + ESP-IDF Network Provisioning
-# over BLE. Improv and the library Web UI are intentionally disabled;
-# RepelBridge serves its own control UI from LittleFS.
-CONFIG_WIFI_CFG_ENABLE_NETWORK_PROVISIONING=y
-CONFIG_WIFI_CFG_NETWORK_PROVISIONING_BLE=y
+# Captive-portal SoftAP only (enable_ap in code). Improv and the library Web
+# UI are intentionally disabled; RepelBridge serves its own control UI from
+# LittleFS.
+#
+# Network Provisioning over BLE is OFF and must stay off while enable_ap is
+# true: wifi_prov_mgr_start_provisioning() unconditionally forces
+# WIFI_MODE_STA (IDF components/wifi_provisioning/src/manager.c:1587), which
+# tears the SoftAP down a few ms after esp_wifi_config brings it up. The two
+# transports cannot both be live.
+# CONFIG_WIFI_CFG_ENABLE_NETWORK_PROVISIONING is not set
+# CONFIG_WIFI_CFG_NETWORK_PROVISIONING_BLE is not set
 # CONFIG_WIFI_CFG_ENABLE_IMPROV_SERIAL is not set
 # CONFIG_WIFI_CFG_ENABLE_IMPROV_BLE is not set
 # CONFIG_WIFI_CFG_ENABLE_WEBUI is not set
