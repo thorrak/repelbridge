@@ -217,7 +217,7 @@ void Bus::setRGB(uint8_t red, uint8_t green, uint8_t blue);
 - **SDK defaults**: `sdkconfig.defaults`
 - **Library Dependencies**:
   - `bblanchon/ArduinoJson` - REST API JSON serialization
-  - `thorrak/esp_wifi_config` (>= 0.2.0) - WiFi provisioning (SoftAP captive portal + Network Provisioning over BLE).
+  - `thorrak/esp_wifi_config` - WiFi provisioning (SoftAP captive portal + Network Provisioning over BLE).
     Transports are selected by `CONFIG_WIFI_CFG_*` in `sdkconfig.defaults`; Improv and the
     library's own Web UI are off because RepelBridge serves its control UI from LittleFS.
     Library events arrive on the default event loop under `WIFI_CFG_EVENT`.
@@ -233,6 +233,42 @@ pio run -e esp32-s3-wifi -t upload
 # Monitor serial output
 pio device monitor -e esp32-s3-wifi
 ```
+
+### Bumping a managed component (IDF component manager)
+
+Editing a version in `src/idf_component.yml` is **not** enough on its own. The IDF
+component manager only re-resolves during a CMake configure, and PlatformIO skips
+configure when the build tree is already current — so `pio run` exits `[SUCCESS]`
+in a couple of seconds having changed nothing. `dependencies.lock` and
+`managed_components/` keep the old version, and the build silently stays on it.
+The success message makes this look like the upgrade worked.
+
+Force the re-resolution:
+
+```bash
+rm -f .pio/build/esp32-s3-wifi/CMakeCache.txt
+rm -rf managed_components/<namespace>__<component>
+pio run -e esp32-s3-wifi
+```
+
+Then confirm the bump actually landed before trusting the build:
+
+```bash
+grep -m1 "^version" managed_components/<namespace>__<component>/idf_component.yml
+git diff dependencies.lock
+```
+
+Two things to watch for:
+
+- **Other dependencies can float.** Deleting the component drops the lock's pin,
+  so anything with a loose constraint may resolve to a newer version at the same
+  time. Read the whole `dependencies.lock` diff, not just the line you meant to
+  change, and pin anything you did not intend to move.
+- **A clean build does not prove the upgrade is safe.** A removed struct field is
+  a compile error, but changed *semantics* or a new Kconfig default compile fine
+  and misbehave on hardware. Check the component's `CHANGELOG.md` and
+  `MIGRATION.md` (both ship in `managed_components/`) for the versions you
+  crossed, and diff the generated `sdkconfig.esp32-s3-wifi` for new options.
 
 ### Linting/Type Checking
 - Check README or ask user for specific lint/typecheck commands

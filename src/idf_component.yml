@@ -6,4 +6,4 @@ dependencies:
   espressif/mdns:
     version: "^1.2"
   thorrak/esp_wifi_config:
-    version: "^0.2.0"
+    version: "^0.4.1"
