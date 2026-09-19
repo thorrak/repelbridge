@@ -21,8 +21,8 @@ static const char* TAG = "bus";
 #define RS485_BUF_SIZE 256
 
 // How often the cartridge runtime counter is flushed to the filesystem while a
-// bus is running. It used to be written only on a graceful power-off, so any
-// reset or power loss discarded the entire running session.
+// bus is running. Flushing periodically rather than only on a graceful
+// power-off bounds what a reset or power loss can discard to one interval.
 #define CARTRIDGE_SAVE_INTERVAL_US (300ULL * 1000000ULL)
 
 static uint32_t millis_now() {
@@ -251,10 +251,10 @@ void Bus::transmit(Packet *packet) {
     return;
   }
 
-  // Transmitting must not power the bus up as a side effect. This used to call
-  // activate(), so a colour or brightness request against an idle bus silently
-  // switched the rail on and left it energised with nothing running on it.
-  // Callers that want the bus live call activate()/powerOn() explicitly.
+  // Transmitting must not power the bus up as a side effect: a colour or
+  // brightness request against an idle bus would energise the rail with
+  // nothing running on it. Callers that want the bus live call
+  // activate()/powerOn() explicitly.
   if (bus_state == BUS_OFFLINE || bus_state == BUS_ERROR) {
     ESP_LOGW(TAG, "Bus %d: Not transmitting, bus is %s", bus_id, getStateString());
     return;
@@ -557,8 +557,8 @@ void Bus::discover_repellers() {
   ESP_LOGI(TAG, "Bus %d: Discovering repellers on the bus...", bus_id);
 
   // Anything already known starts as OFFLINE and is only brought back by an
-  // actual response. Previously a device that had been unplugged was carried
-  // forward as if it were still present and got warmed up along with the rest.
+  // actual response, so a device that has been unplugged is not carried
+  // forward as present and warmed up along with the rest.
   for (auto& repeller : repellers) {
     repeller.state = OFFLINE;
   }
@@ -1120,8 +1120,9 @@ void Bus::load_settings() {
     return;
   }
 
-  // Read settings in order. Read into a scratch copy first: a short or corrupt
-  // file used to leave the live settings as a mix of defaults and garbage.
+  // Read settings in order. Read into a scratch copy first so a short or
+  // corrupt file cannot leave the live settings as a mix of defaults and
+  // garbage.
   struct {
     uint8_t red, green, blue, brightness;
     uint32_t cartridge_active_seconds;
